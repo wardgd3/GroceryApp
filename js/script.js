@@ -27,6 +27,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const gQtyEl       = document.getElementById("g-qty");
   const gPriceEl     = document.getElementById("g-price");
   const addFromGlossaryBtn = document.getElementById("add-from-glossary-btn");
+  const openAddItemBtn = document.getElementById("detail-add-item-btn");
+  const addItemDialog = document.getElementById("add-item-dialog");
+  const closeAddItemDialog = document.getElementById("close-add-item-dialog");
 
   // Custom item
   const cNameEl  = document.getElementById("c-name");
@@ -447,6 +450,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }, 180);
 
   function renderSuggestions() {
+    if (!gSuggBox) return;
     if (!sugg.length) { hideSuggestions(); return; }
     gSuggBox.innerHTML = "";
     sugg.forEach((s, i) => {
@@ -468,14 +472,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function hideSuggestions() {
+    if (!gSuggBox) return;
     gSuggBox.classList.add("hidden");
     gSuggBox.innerHTML = "";
   }
 
   function clearTypeahead() {
-    gSearchEl.value = "";
-    gPriceEl.value = "";
-    gQtyEl.value = 1;
+    if (gSearchEl) gSearchEl.value = "";
+    if (gPriceEl) gPriceEl.value = "";
+    if (gQtyEl) gQtyEl.value = 1;
     selectedGlossary = null;
     sugg = [];
     activeIndex = -1;
@@ -515,7 +520,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Keyboard navigation
-  gSearchEl.addEventListener("keydown", (e) => {
+  if (gSearchEl) gSearchEl.addEventListener("keydown", (e) => {
     if (gSuggBox.classList.contains("hidden")) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -535,13 +540,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  gSearchEl.addEventListener("input", (e) => {
+  if (gSearchEl) gSearchEl.addEventListener("input", (e) => {
     selectedGlossary = null; 
     const q = e.target.value.trim();
     doSearch(q);
   });
 
-  gSearchEl.addEventListener("blur", () => {
+  if (gSearchEl) gSearchEl.addEventListener("blur", () => {
     setTimeout(() => hideSuggestions(), 100);
   });
 
@@ -616,7 +621,24 @@ document.addEventListener("DOMContentLoaded", () => {
   closeDetail.addEventListener("click", closeDetailView);
   deleteListBtn.addEventListener("click", async () => { if (currentList) await deleteList(currentList.id); });
 
-  addFromGlossaryBtn.addEventListener("click", addFromGlossary);
+  if (addFromGlossaryBtn) {
+    addFromGlossaryBtn.addEventListener("click", addFromGlossary);
+  }
+  if (openAddItemBtn && addItemDialog) {
+    openAddItemBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (typeof addItemDialog.showModal === 'function') addItemDialog.showModal();
+      else addItemDialog.open = true;
+      setTimeout(()=>{ try { gSearchEl.focus(); } catch(_){} }, 0);
+    });
+  }
+  if (closeAddItemDialog && addItemDialog) {
+    closeAddItemDialog.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (typeof addItemDialog.close === 'function') addItemDialog.close();
+      else addItemDialog.open = false;
+    });
+  }
   if (addCustomBtn) {
     addCustomBtn.addEventListener("click", addCustom);
   }

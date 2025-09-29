@@ -89,6 +89,37 @@ button.ghost { background:transparent; color:#111827; border:1px solid var(--lin
 .actions { display:flex; gap:8px; align-items:center;margin-bottom:1rem;}
 .hidden { display:none; }
 
+/* Add-to-List dialog responsive tweaks */
+dialog#add-item-dialog form {
+  width: 100%;
+}
+dialog#add-item-dialog {
+  width: calc(100vw - 24px);
+  max-width: 640px;
+  margin: 0 auto;
+  border-radius: 12px;
+  padding: 12px;
+  max-height: 90vh;
+  overflow: auto;
+}
+dialog#add-item-dialog .row-4 {
+  grid-template-columns: 2fr 1fr 1fr auto;
+}
+@media (max-width: 600px) {
+  dialog#add-item-dialog .row-4 {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  dialog#add-item-dialog .row-4 label.typeahead { grid-column: 1 / -1; }
+  dialog#add-item-dialog #add-from-glossary-btn { width: 100%; }
+  dialog#add-item-dialog input[type="text"],
+  dialog#add-item-dialog input[type="number"] {
+    padding: 6px 8px;
+  }
+}
+
+/* (removed duplicate typeahead positioning; see consolidated section below) */
+
 /* ====== Typeahead ====== */
 .typeahead { position: relative; }
 .typeahead input { width: 100%; }

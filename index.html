@@ -22,8 +22,8 @@
     <a class="brand" href="index.html">GroceryApp</a>
     <div class="nav-links">
       <a href="index.html" class="nav-link">Home</a>
-      <a href="glossary.html" class="nav-link">Glossary</a>
-      <a href="#" id="open-add-item-btn" class="nav-link">Add Item</a>
+    <a href="glossary.html" class="nav-link">Glossary</a>
+    <a href="#" id="open-add-item-btn" class="nav-link">Add Item</a>
     </div>
     <button id="mobile-menu-btn" class="hamburger" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
       <span class="material-icons" aria-hidden="true">menu</span>
@@ -62,29 +62,38 @@
 
       <div class="hr"></div>
 
-      <h3>Add item</h3>
-      <div class="row">
-        <div class="row-4">
-          <!-- Typeahead search -->
-          <label class="typeahead">
-            <div class="muted">Search glossary</div>
-            <input id="g-search" type="text" placeholder="Type to search…" autocomplete="off" style="width:14rem;"/>
-            <div id="g-suggestions" class="suggestions hidden" role="listbox" aria-label="Glossary suggestions"></div>
-          </label>
-
-          <label>
-            <div class="muted">Qty</div>
-            <input id="g-qty" type="number" min="1" value="1"/>
-          </label>
-          <label>
-            <div class="muted">Price</div>
-            <input id="g-price" type="number" step="0.01" placeholder="Auto" />
-          </label>
-          <div style="align-self:end;">
-            <button id="add-from-glossary-btn">Add</button>
-          </div>
-        </div>
+      <!-- Add Item Button (opens glossary add dialog) -->
+      <div style="margin-bottom: 1rem;">
+        <button id="detail-add-item-btn" type="button">Add Item</button>
       </div>
+
+      <!-- Add-to-List Dialog (typeahead from glossary, adds to current list) -->
+      <dialog id="add-item-dialog">
+        <form method="dialog" style="width:100%; max-width:100%;">
+          <h3 style="margin:0 0 8px 0;">Add Item to List</h3>
+          <div class="row-4">
+            <label class="typeahead">
+              <div class="muted">Search glossary</div>
+              <input id="g-search" type="text" placeholder="Type to search…" autocomplete="off" style="width:100%;"/>
+              <div id="g-suggestions" class="suggestions hidden" role="listbox" aria-label="Glossary suggestions"></div>
+            </label>
+            <label>
+              <div class="muted">Qty</div>
+              <input id="g-qty" type="number" min="1" value="1"/>
+            </label>
+            <label>
+              <div class="muted">Price</div>
+              <input id="g-price" type="number" step="0.01" placeholder="Auto" />
+            </label>
+            <div style="align-self:end;">
+              <button id="add-from-glossary-btn" type="button">Add</button>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+            <button type="button" class="ghost" id="close-add-item-dialog">Cancel</button>
+          </div>
+        </form>
+      </dialog>
 
       <div class="hr"></div>
 
