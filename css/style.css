@@ -1,3 +1,13 @@
+@media (max-width: 600px) {
+  #g-search,
+  #g-qty,
+  #g-price {
+    padding: 5px 8px;
+    font-size: 0.95em;
+    min-height: 32px;
+    height: 32px;
+  }
+}
 :root{
   /* Existing nav palette */
   --parchment:#f6fafc;

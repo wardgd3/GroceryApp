@@ -210,19 +210,43 @@ document.addEventListener("DOMContentLoaded", () => {
     row.className = "item";
     const checked = !!it.is_checked;
 
+    // Dropdown menu HTML
+    const dropdownId = `dropdown-${it.id}`;
     row.innerHTML = `
       <input type="checkbox" ${checked ? "checked" : ""} data-check="${it.id}" />
-      <div>
-        ${checked ? `<del>${it.name}</del>` : it.name}
-        <input type="number" min="1" value="${it.quantity}" data-qty="${it.id}" style="width:3.5em; margin-left:8px;" />
+      <div style="display:flex; align-items:center; gap:8px;">
+        ${checked ? `<del>${it.name} × ${it.quantity}</del>` : `${it.name} × ${it.quantity}`}
+        <div style="position:relative; margin-left:auto;">
+          <button class="ghost dropdown-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="${dropdownId}" style="padding:4px 8px; font-size:18px;">&#8942;</button>
+          <div class="dropdown-menu hidden" id="${dropdownId}" style="position:absolute; right:0; top:110%; background:#fff; border:1px solid #ccc; border-radius:8px; min-width:90px; z-index:10; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+            <button class="dropdown-item" data-edit-item="${it.id}" style="width:100%; text-align:left; padding:8px 12px; background:none; border:none; cursor:pointer;color:black;">Edit</button>
+            <button class="dropdown-item" data-del="${it.id}" style="width:100%; text-align:left; padding:8px 12px; background:none; border:none; cursor:pointer; color:#b00;">Delete</button>
+          </div>
+        </div>
       </div>
       <div class="actions">
         <span class="muted" title="Price">${fmtMoney((it.price || 0) * (it.quantity || 1))}</span>
-        <button class="ghost" data-edit-item="${it.id}">Edit</button>
-        <button class="ghost" data-del="${it.id}">✕</button>
       </div>
     `;
 
+    // Dropdown logic
+    const toggleBtn = row.querySelector('.dropdown-toggle');
+    const menu = row.querySelector('.dropdown-menu');
+    if (toggleBtn && menu) {
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = !menu.classList.contains('hidden');
+        document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.add('hidden'));
+        if (!isOpen) menu.classList.remove('hidden');
+        else menu.classList.add('hidden');
+      });
+      // Close dropdown on outside click
+      document.addEventListener('click', (e) => {
+        if (!row.contains(e.target)) menu.classList.add('hidden');
+      });
+    }
+
+    // Action handlers
     row.addEventListener("click", async (e) => {
       const idCheck = e.target.getAttribute("data-check");
       const idEdit  = e.target.getAttribute("data-edit-item");
@@ -238,20 +262,6 @@ document.addEventListener("DOMContentLoaded", () => {
         await deleteItem(idDel);
       }
     });
-
-    // Quantity change handler
-    const qtyInput = row.querySelector('input[type="number"][data-qty]');
-    if (qtyInput) {
-      qtyInput.addEventListener('change', async (e) => {
-        const newQty = Number(e.target.value) || 1;
-        if (newQty !== it.quantity) {
-          const { error } = await sb.from('shopping_list_items').update({ quantity: newQty }).eq('id', it.id);
-          if (error) { console.error(error); alert('Error updating quantity'); return; }
-          await loadItems();
-        }
-      });
-    }
-
     itemsBox.appendChild(row);
   }
 
