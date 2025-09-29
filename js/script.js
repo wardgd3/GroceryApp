@@ -212,7 +212,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     row.innerHTML = `
       <input type="checkbox" ${checked ? "checked" : ""} data-check="${it.id}" />
-      <div>${checked ? `<del>${it.name} × ${it.quantity}</del>` : `${it.name} × ${it.quantity}`}</div>
+      <div>
+        ${checked ? `<del>${it.name}</del>` : it.name}
+        <input type="number" min="1" value="${it.quantity}" data-qty="${it.id}" style="width:3.5em; margin-left:8px;" />
+      </div>
       <div class="actions">
         <span class="muted" title="Price">${fmtMoney((it.price || 0) * (it.quantity || 1))}</span>
         <button class="ghost" data-edit-item="${it.id}">Edit</button>
@@ -235,6 +238,20 @@ document.addEventListener("DOMContentLoaded", () => {
         await deleteItem(idDel);
       }
     });
+
+    // Quantity change handler
+    const qtyInput = row.querySelector('input[type="number"][data-qty]');
+    if (qtyInput) {
+      qtyInput.addEventListener('change', async (e) => {
+        const newQty = Number(e.target.value) || 1;
+        if (newQty !== it.quantity) {
+          const { error } = await sb.from('shopping_list_items').update({ quantity: newQty }).eq('id', it.id);
+          if (error) { console.error(error); alert('Error updating quantity'); return; }
+          await loadItems();
+        }
+      });
+    }
+
     itemsBox.appendChild(row);
   }
 
@@ -431,9 +448,9 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="name">${escapeHtml(s.name)}</div>
         <div class="meta">${s.category ?? ""} ${s.consumer ? "· " + escapeHtml(s.consumer) : ""} ${s.price != null ? "· $" + Number(s.price).toFixed(2) : ""}</div>
       `;
-      el.addEventListener("mousedown", (e) => {
+      el.addEventListener("mousedown", async (e) => {
         e.preventDefault();
-        chooseSuggestion(i);
+        await chooseSuggestion(i);
       });
       gSuggBox.appendChild(el);
     });
@@ -455,13 +472,32 @@ document.addEventListener("DOMContentLoaded", () => {
     hideSuggestions();
   }
 
-  function chooseSuggestion(i) {
+  async function chooseSuggestion(i) {
     const s = sugg[i];
     if (!s) return;
     selectedGlossary = s;
     gSearchEl.value = s.name;
     gPriceEl.value = s.price ?? "";
     hideSuggestions();
+    // Auto-add to list if possible
+    if (currentList) {
+      const qty = Number(gQtyEl.value) || 1;
+      const price = gPriceEl.value !== "" ? Number(gPriceEl.value) : (s.price ?? null);
+      const payload = {
+        list_id: currentList.id,
+        item_id: s.id,
+        name: s.name,
+        price: price,
+        quantity: qty,
+        category: s.category ?? null,
+        consumer: (s.consumer || "both").toLowerCase(),
+        is_checked: false
+      };
+      const { error } = await sb.from("shopping_list_items").insert(payload);
+      if (error) { console.error(error); alert("Error adding item"); return; }
+      clearTypeahead();
+      await loadItems();
+    }
   }
 
   function escapeHtml(str) {
