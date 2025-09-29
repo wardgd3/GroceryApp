@@ -1,0 +1,146 @@
+:root{
+  /* Existing nav palette */
+  --parchment:#f6fafc;
+  --ink:#203040;
+  --wood:#b6c5d3;
+  --shadow:rgba(0,0,0,.25);
+
+  /* App/layout palette */
+  --card:#ffffff;
+  --muted:#6b7280;
+  --line:#e5e7eb;
+  --bg:var(--parchment); /* use parchment as page bg */
+}
+
+/* Global */
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  padding: 16px;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+/* ====== Top Nav (kept from your CSS) ====== */
+.top-nav{
+  position: relative;
+  display:flex; align-items:center; gap:14px;
+  padding:10px 14px; background:var(--parchment);
+  box-shadow:0 2px 8px rgba(53,79,98,.18); z-index:100;
+  min-height:56px;
+  margin-bottom: 2rem;
+}
+.brand{ font-weight:700; color:var(--ink); text-decoration:none; }
+.nav-links{ display:flex; gap:10px; margin-left:auto; }
+.nav-link{ color:var(--ink); text-decoration:none; padding:8px 10px; border-radius:8px; }
+.nav-link:hover{ background:#e9f1f6; }
+
+/* Hamburger button (hidden on desktop) */
+.hamburger{
+  display:none; margin-left:auto; background:none; border:none; padding:6px;
+  cursor:pointer; color:#5b6e80;
+}
+.hamburger:focus{ outline:none; }
+
+/* Mobile dropdown */
+.mobile-menu{
+  display:none; position:absolute; right:10px; top:calc(100% + 6px);
+  min-width:210px; background:var(--parchment); border:1px solid var(--wood);
+  border-radius:10px; box-shadow:0 8px 24px var(--shadow); padding:6px;
+}
+.mobile-menu.show{ display:flex; flex-direction:column; }
+.mobile-menu-link{
+  padding:10px 12px; color:var(--ink); text-decoration:none; border-radius:8px;
+}
+.mobile-menu-link:hover{ background:#e9f1f6; }
+
+/* Responsive: show hamburger, hide desktop links */
+@media (max-width:700px){
+  .nav-links{ display:none; }
+  .hamburger{ display:inline-flex; align-items:center; justify-content:center; }
+  .top-nav{ min-height:64px; }
+}
+
+/* ====== App layout & components (merged) ====== */
+.wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.row { display: grid; gap: 12px; grid-template-columns: 1fr auto; align-items: end; }
+.row-3 { display: grid; gap: 12px; grid-template-columns: 2fr 1fr 1fr; }
+.row-4 { display: grid; gap: 12px; grid-template-columns: 2fr 1fr 1fr 1fr; }
+input, button { font: inherit; padding: 10px; border:1px solid var(--line); border-radius:10px; }
+button { background:#111827; color:white; cursor:pointer; }
+button.ghost { background:transparent; color:#111827; border:1px solid var(--line); }
+.list-grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.muted { color: var(--muted); font-size: 0.9rem; }
+.items { display:flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.item { display:grid; grid-template-columns: 24px 1fr auto; gap: 8px; align-items:center; padding:8px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+.item del { color: var(--muted); }
+.split { display:flex; justify-content:space-between; align-items:center; gap: 8px;}
+.hr { height:1px; background: var(--line); margin: 12px 0; }
+.actions { display:flex; gap:8px; align-items:center;margin-bottom:1rem;}
+.hidden { display:none; }
+
+/* ====== Typeahead ====== */
+.typeahead { position: relative; }
+.typeahead input { width: 100%; }
+.suggestions {
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  margin-top: 6px; padding: 6px; z-index: 30; box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+  max-height: 260px; overflow: auto;
+}
+.sugg { padding: 8px 10px; border-radius: 8px; display:flex; justify-content: space-between; gap: 10px; cursor: pointer; }
+.sugg:hover, .sugg.active { background: #f3f4f6; }
+.sugg .name { font-weight: 600; }
+.sugg .meta { color: var(--muted); font-size: 0.85rem; }
+
+/* ====== Mobile responsiveness ====== */
+@media (max-width: 900px) {
+  .wrap { padding: 0 8px; }
+}
+
+@media (max-width: 740px) {
+  body { padding: 12px; }
+  .card { padding: 14px; }
+  .row { grid-template-columns: 1fr; }
+  .row-3, .row-4 { grid-template-columns: 1fr; }
+  .split { flex-direction: column; align-items: stretch; gap: 10px; }
+  .actions { justify-content: flex-start; flex-wrap: wrap; gap: 6px; }
+  input, button, select, textarea { min-height: 44px; font-size: 16px; }
+  .item { grid-template-columns: 28px 1fr; }
+  .item .actions { justify-content: space-between; }
+  .list-grid { grid-template-columns: 1fr; }
+
+  /* Typeahead suggestions should fit the screen */
+  .typeahead { position: relative; }
+  .suggestions { max-height: 50vh; }
+}
+
+@media (max-width: 420px) {
+  .top-nav { padding: 8px 10px; }
+  .brand { font-size: 1rem; }
+  .nav-link { padding: 6px 8px; }
+  .card { padding: 12px; }
+  .sugg { padding: 8px; }
+  .sugg .meta { font-size: 0.8rem; }
+}
+
+/* ====== Glossary page styles ====== */
+.g-section { max-width: 780px; margin: 0 auto 18px auto; }
+.g-section h2 { margin: 18px 0 8px 0; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+.g-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 10px 2px;
+  border-bottom: 1px dashed #eee;
+}
+.g-name { font-weight: 600; color: var(--ink); }
+.g-meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; color: var(--muted); }
+.g-tag { background:#f3f4f6; color:#374151; padding:2px 8px; border-radius:999px; font-size:.85rem; }
+.g-sep { color:#c4c4c4; margin: 0 2px; }
+
+@media (max-width: 740px) {
+  .g-item { grid-template-columns: 1fr; padding: 8px 0; }
+  .g-name { font-size: 1rem; }
+  .g-meta { font-size: .9rem; }
+}

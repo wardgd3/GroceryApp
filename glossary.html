@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Grocery Glossary</title>
+	<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" defer></script>
+    <link rel="stylesheet" href="css/style.css" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+    <script src="js/sb-client.js" defer></script>
+    <script src="js/nav.js" defer></script>
+	<script src="js/add-glossary-item.js" defer></script>
+	<script src="js/glossary.js" defer></script>
+	<style>
+		body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 16px; }
+		.search-wrap { max-width: 680px; margin: 0 auto 12px auto; }
+		.search-wrap input { width: 100%; padding: 10px 12px; font-size: 1rem; border: 1px solid #ccc; border-radius: 8px; }
+		.toolbar { max-width: 680px; margin: 8px auto 16px auto; display: flex; gap: 10px; align-items: center; }
+		.filter-panel { display: none; max-width: 680px; margin: 0 auto 16px auto; padding: 12px; border: 1px solid #ddd; border-radius: 8px; }
+		.filter-chip { display: inline-block; margin: 6px 8px 0 0; padding: 6px 10px; border: 1px solid #ccc; border-radius: 999px; cursor: pointer; user-select: none; }
+		.filter-chip.active { background: #0ea5e9; color: #fff; border-color: #0ea5e9; }
+		.section { max-width: 780px; margin: 0 auto 18px auto; }
+		.section h2 { margin: 18px 0 8px 0; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+		.item { padding: 6px 2px; border-bottom: 1px dashed #eee; }
+		.muted { color: #666; }
+	</style>
+	</head>
+	<body>
+
+<nav class="top-nav">
+  <a class="brand" href="index.html">GroceryApp</a>
+
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">Home</a>
+    <a href="glossary.html" class="nav-link">Glossary</a>
+		<a href="#" id="open-add-item-btn" class="nav-link">Add Item</a>
+  </div>
+
+  <button id="mobile-menu-btn" class="hamburger" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+    <span class="material-icons" aria-hidden="true">menu</span>
+  </button>
+
+  <div id="mobile-menu" class="mobile-menu" role="menu" aria-labelledby="mobile-menu-btn">
+    <a class="mobile-menu-link" role="menuitem" href="index.html">Home</a>
+    <a class="mobile-menu-link" role="menuitem" href="glossary.html">Glossary</a>
+		<a class="mobile-menu-link" role="menuitem" href="#" id="mobile-add-item-link">Add Item</a>
+  </div>
+</nav>
+
+		<div class="search-wrap">
+			<input id="glossary-search" placeholder="Search items..." autocomplete="off" />
+		</div>
+		<div class="toolbar">
+			<button id="toggle-filter">Filter</button>
+			<button id="clear-filter">Clear</button>
+		</div>
+		<div id="filter-panel" class="filter-panel"></div>
+		<div id="glossary-results"></div>
+	</body>
+	</html>

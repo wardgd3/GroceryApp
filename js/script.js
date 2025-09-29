@@ -1,156 +1,586 @@
-// --- Simple test section to display grocery_list rows ---
-async function loadGroceryList() {
-	const { data, error } = await sb.from('grocery_list').select('name, price, category, consumer');
-	const tableEl = document.getElementById('grocery-table');
-	if (error) {
-		if (tableEl) tableEl.outerHTML = `<div style="color:red;">Error: ${error.message}</div>`;
-		else document.body.insertAdjacentHTML('beforeend', `<div style="color:red;">Error: ${error.message}</div>`);
-		return;
-	}
-	if (tableEl) tableEl.outerHTML = renderGroceryTable(data);
-	else document.body.insertAdjacentHTML('beforeend', renderGroceryTable(data));
-}
+// js/script.js
+document.addEventListener("DOMContentLoaded", () => {
+  if (!window.sb) return;
 
-function renderGroceryTable(data) {
-	let html = `<table border="1" cellpadding="6" style="margin:1em 0;" id="grocery-table"><tr><th>Name</th><th>Price</th><th>Category</th><th>Consumer</th></tr>`;
-	for (const row of data) {
-		html += `<tr><td>${row.name || ''}</td><td>${row.price ?? ''}</td><td>${row.category || ''}</td><td>${row.consumer || ''}</td></tr>`;
-	}
-	html += '</table>';
-	return html;
-}
+  // --- Elements
+  const listNameEl   = document.getElementById("list-name");
+  const listDateEl   = document.getElementById("list-date");
+  const createBtn    = document.getElementById("create-list-btn");
+  const createMsg    = document.getElementById("create-list-msg");
+  const createDialog = document.getElementById("create-list-dialog");
+  const openCreateBtn= document.getElementById("open-create-list-btn");
+  const closeCreate  = document.getElementById("close-create-list");
 
-if (window.__grocery_app_initialized__) {
-    // Prevent double init if the script is accidentally loaded twice
-    console.warn('Grocery app already initialized.');
-} else {
-    window.__grocery_app_initialized__ = true;
-    window.addEventListener('DOMContentLoaded', () => {
-	// Only render table once in a dedicated container
-	let tableContainer = document.getElementById('grocery-table-container');
-	if (!tableContainer) {
-		tableContainer = document.createElement('div');
-		tableContainer.id = 'grocery-table-container';
-		document.body.insertBefore(tableContainer, document.body.firstChild);
-	}
+  const listsGrid    = document.getElementById("lists-grid");
+  const listsEmpty   = document.getElementById("lists-empty");
+  const refreshLists = document.getElementById("refresh-lists-btn");
 
-	let currentQuery = '';
-	async function renderAndReplaceTable() {
-		let query = sb.from('grocery_list').select('name, price, category, consumer');
-		if (currentQuery) {
-			// ILIKE search across name, category, consumer
-			const q = `%${currentQuery}%`;
-			query = query.or(`name.ilike.${q},category.ilike.${q},consumer.ilike.${q}`);
-		}
-		const { data, error } = await query;
-		if (error) {
-			tableContainer.innerHTML = `<div style="color:red;">Error: ${error.message}</div>`;
-			return;
-		}
-		tableContainer.innerHTML = renderGroceryTable(data);
-	}
+  const detail       = document.getElementById("detail");
+  const detailTitle  = document.getElementById("detail-title");
+  const detailSub    = document.getElementById("detail-subtitle");
+  const closeDetail  = document.getElementById("close-detail-btn");
+  const deleteListBtn= document.getElementById("delete-list-btn");
 
-	renderAndReplaceTable();
+  // Typeahead elements
+  const gSearchEl    = document.getElementById("g-search");
+  const gSuggBox     = document.getElementById("g-suggestions");
+  const gQtyEl       = document.getElementById("g-qty");
+  const gPriceEl     = document.getElementById("g-price");
+  const addFromGlossaryBtn = document.getElementById("add-from-glossary-btn");
 
-	// Modal logic
-	const addBtn = document.getElementById('add-item-btn');
-	const modal = document.getElementById('add-item-modal');
-	const form = document.getElementById('add-item-form');
-	const cancelBtn = document.getElementById('cancel-add-item');
-	const errorDiv = document.getElementById('add-item-error');
+  // Custom item
+  const cNameEl  = document.getElementById("c-name");
+  const cQtyEl   = document.getElementById("c-qty");
+  const cPriceEl = document.getElementById("c-price");
+  const addCustomBtn = document.getElementById("add-custom-btn");
 
-	addBtn.addEventListener('click', () => {
-		modal.style.display = 'flex';
-		form.reset();
-		errorDiv.textContent = '';
-	});
-	cancelBtn.addEventListener('click', () => {
-		modal.style.display = 'none';
-	});
-	modal.addEventListener('click', (e) => {
-		if (e.target === modal) modal.style.display = 'none';
-	});
+  // Items area
+  const itemsBox  = document.getElementById("items");
+  const itemsEmpty= document.getElementById("items-empty");
+  const refreshItemsBtn = document.getElementById("refresh-items-btn");
+  const totalsEl  = document.getElementById("totals");
 
-	form.addEventListener('submit', async (e) => {
-		e.preventDefault();
-		errorDiv.textContent = '';
-		const formData = new FormData(form);
-		const name = formData.get('name').trim();
-		const price = parseFloat(formData.get('price'));
-		const category = formData.get('category').trim();
-		const consumer = formData.get('consumer').trim();
-		if (!name || isNaN(price) || !category || !consumer) {
-			errorDiv.textContent = 'Please fill out all fields.';
-			return;
-		}
-		const { error } = await sb.from('grocery_list').insert([{ name, price, category, consumer }]);
-		if (error) {
-			errorDiv.textContent = error.message;
-			return;
-		}
-		modal.style.display = 'none';
-		await renderAndReplaceTable();
-	});
+  // --- State
+  let currentList = null;     
+  let items = [];             
+  let sugg = [];              
+  let activeIndex = -1;       
+  let selectedGlossary = null; 
 
-	// Search logic
-	const searchInput = document.getElementById('grocery-search');
-	const suggestions = document.getElementById('search-suggestions');
-	let debounceTimer;
+  // --- Helpers
+  function fmtDateInput(d = new Date()) {
+    const iso = new Date(d).toISOString();
+    return iso.slice(0,10);
+  }
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) return "$0.00";
+    return `$${(+n).toFixed(2)}`;
+  }
+  function msg(el, text) {
+    el.textContent = text || "";
+  }
+  const debounce = (fn, ms=250) => {
+    let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  };
 
-	function hideSuggestions() {
-		suggestions.style.display = 'none';
-		suggestions.innerHTML = '';
-	}
+  // Init date
+  listDateEl.value = fmtDateInput();
 
-	function showSuggestions(items) {
-		if (!items.length) { hideSuggestions(); return; }
-		suggestions.innerHTML = items.map(it => `<div class="suggestion-item" data-name="${it.name || ''}" data-category="${it.category || ''}" data-consumer="${it.consumer || ''}" style="padding:8px 12px;cursor:pointer;">${
-			[it.name, it.category, it.consumer].filter(Boolean).join(' • ')
-		}</div>`).join('');
-		suggestions.style.display = 'block';
-		Array.from(suggestions.children).forEach(child => {
-			child.addEventListener('click', () => {
-				const text = child.getAttribute('data-name');
-				searchInput.value = text || '';
-				currentQuery = (text || '').trim();
-				hideSuggestions();
-				renderAndReplaceTable();
-			});
-		});
-	}
+  // --- Lists
+  async function loadLists() {
+    listsGrid.innerHTML = "";
+    msg(listsEmpty, "Loading...");
+    const { data, error } = await sb
+      .from("shopping_lists")
+      .select("id, list_name, list_date, created_at")
+      .order("list_date", { ascending: false });
+    if (error) { console.error(error); msg(listsEmpty, "Error loading lists"); return; }
 
-	async function runSuggestionQuery(term) {
-		const like = `%${term}%`;
-		const { data, error } = await sb
-			.from('grocery_list')
-			.select('name, category, consumer')
-			.or(`name.ilike.${like},category.ilike.${like},consumer.ilike.${like}`)
-			.limit(8);
-		if (error) { hideSuggestions(); return; }
-		showSuggestions(data || []);
-	}
+    if (!data || data.length === 0) {
+      msg(listsEmpty, "No lists yet. Create one above.");
+      return;
+    }
+    listsEmpty.textContent = "";
 
-	searchInput?.addEventListener('input', (e) => {
-		const term = e.target.value.trim();
-		currentQuery = term;
-		clearTimeout(debounceTimer);
-		if (!term) { hideSuggestions(); renderAndReplaceTable(); return; }
-		debounceTimer = setTimeout(() => runSuggestionQuery(term), 220);
-	});
-
-	searchInput?.addEventListener('keydown', (e) => {
-		if (e.key === 'Enter') {
-			e.preventDefault();
-			hideSuggestions();
-			currentQuery = searchInput.value.trim();
-			renderAndReplaceTable();
-		}
-	});
-
-	document.addEventListener('click', (e) => {
-		if (!suggestions.contains(e.target) && e.target !== searchInput) {
-			hideSuggestions();
-		}
-	});
+    data.forEach(l => {
+      const card = document.createElement("div");
+      card.className = "card";
+      const dateStr = new Date(l.list_date).toLocaleDateString();
+      card.innerHTML = `
+        <div class="split">
+          <div>
+            <strong>${l.list_name}</strong><br/>
+            <span class="muted">${dateStr}</span>
+          </div>
+          <div class="actions">
+            <button class="ghost" data-open="${l.id}">Open</button>
+            <button class="ghost" data-edit="${l.id}" data-name="${l.list_name.replace(/"/g, '&quot;')}">Edit</button>
+            <button class="ghost" data-del="${l.id}">Delete</button>
+          </div>
+        </div>
+      `;
+      card.addEventListener("click", async (e) => {
+        const openId = e.target.getAttribute("data-open");
+        const editId = e.target.getAttribute("data-edit");
+        const delId  = e.target.getAttribute("data-del");
+        if (openId) { openList(openId); }
+        if (editId)  { await editListName(editId, e.target.getAttribute('data-name') || ''); }
+        if (delId)  { await deleteList(delId); }
+      });
+      listsGrid.appendChild(card);
     });
-}
+  }
+
+  async function editListName(listId, currentName) {
+    const newName = (prompt("Rename list:", currentName || "") || "").trim();
+    if (!newName || newName === currentName) return;
+    const { error } = await sb.from("shopping_lists").update({ list_name: newName }).eq("id", listId);
+    if (error) { console.error(error); alert("Error renaming list"); return; }
+    await loadLists();
+    if (currentList && String(currentList.id) === String(listId)) {
+      currentList.list_name = newName;
+      detailTitle.textContent = newName;
+    }
+  }
+
+  async function createList() {
+    const name = (listNameEl.value || "").trim();
+    const date = listDateEl.value || fmtDateInput();
+    if (!name) { msg(createMsg, "Please enter a list name."); return; }
+
+    msg(createMsg, "Creating...");
+    const { data, error } = await sb
+      .from("shopping_lists")
+      .insert({ list_name: name, list_date: date })
+      .select("id, list_name, list_date")
+      .single();
+
+    if (error) { console.error(error); msg(createMsg, "Error creating list."); return; }
+    msg(createMsg, "List created ✓");
+    listNameEl.value = "";
+    await loadLists();
+    await openList(data.id);
+  }
+
+  async function openList(listId) {
+    const { data: list, error: e1 } = await sb
+      .from("shopping_lists")
+      .select("*")
+      .eq("id", listId)
+      .single();
+
+    if (e1 || !list) { console.error(e1); return; }
+    currentList = list;
+
+    document.getElementById("detail-title").textContent = list.list_name;
+    document.getElementById("detail-subtitle").textContent = new Date(list.list_date).toLocaleString();
+    detail.classList.remove("hidden");
+
+    clearTypeahead();
+
+    await loadItems();
+    window.scrollTo({ top: detail.offsetTop - 12, behavior: "smooth" });
+  }
+
+  async function deleteList(listId) {
+    if (!confirm("Delete this list?")) return;
+    await sb.from("shopping_list_items").delete().eq("list_id", listId);
+    const { error } = await sb.from("shopping_lists").delete().eq("id", listId);
+    if (error) { console.error(error); alert("Error deleting list"); return; }
+    if (currentList && currentList.id === listId) {
+      currentList = null;
+      detail.classList.add("hidden");
+    }
+    await loadLists();
+  }
+
+  function closeDetailView() {
+    currentList = null;
+    detail.classList.add("hidden");
+  }
+
+  // --- Items
+  async function loadItems() {
+    if (!currentList) return;
+    itemsBox.innerHTML = "";
+    msg(itemsEmpty, "Loading items…");
+
+    const { data, error } = await sb
+      .from("shopping_list_items")
+      .select("id, item_id, name, price, quantity, category, consumer, is_checked, created_at")
+      .eq("list_id", currentList.id)
+      .order("is_checked", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) { console.error(error); msg(itemsEmpty, "Error loading items"); return; }
+
+    items = data || [];
+    if (items.length === 0) {
+      msg(itemsEmpty, "No items yet.");
+      totalsEl.textContent = "";
+      return;
+    }
+    itemsEmpty.textContent = "";
+    items.forEach(renderItemRow);
+    renderTotals();
+  }
+
+  function renderItemRow(it) {
+    const row = document.createElement("div");
+    row.className = "item";
+    const checked = !!it.is_checked;
+
+    row.innerHTML = `
+      <input type="checkbox" ${checked ? "checked" : ""} data-check="${it.id}" />
+      <div>${checked ? `<del>${it.name} × ${it.quantity}</del>` : `${it.name} × ${it.quantity}`}</div>
+      <div class="actions">
+        <span class="muted" title="Price">${fmtMoney((it.price || 0) * (it.quantity || 1))}</span>
+        <button class="ghost" data-edit-item="${it.id}">Edit</button>
+        <button class="ghost" data-del="${it.id}">✕</button>
+      </div>
+    `;
+
+    row.addEventListener("click", async (e) => {
+      const idCheck = e.target.getAttribute("data-check");
+      const idEdit  = e.target.getAttribute("data-edit-item");
+      const idDel   = e.target.getAttribute("data-del");
+      if (idCheck) {
+        await toggleItem(idCheck, !it.is_checked);
+      }
+      if (idEdit) {
+        const found = items.find(x => String(x.id) === String(idEdit));
+        if (found) openItemEditDialog(found);
+      }
+      if (idDel) {
+        await deleteItem(idDel);
+      }
+    });
+    itemsBox.appendChild(row);
+  }
+
+  // --- Item edit dialog
+  function ensureItemEditDialog() {
+    let dlg = document.getElementById('edit-item-dialog');
+    if (dlg) return dlg;
+    dlg = document.createElement('dialog');
+    dlg.id = 'edit-item-dialog';
+    dlg.innerHTML = `
+      <form id="edit-item-form" method="dialog" style="min-width:320px; max-width:520px;">
+        <h3 style="margin:0 0 8px 0;">Edit Item</h3>
+        <div class="muted" id="edit-item-msg" style="margin-bottom:8px;"></div>
+        <label style="display:block; margin-bottom:8px;">
+          <div class="muted">Name</div>
+          <input id="ei-name" type="text" required />
+        </label>
+        <div style="display:flex; gap:12px;">
+          <label style="flex:1;">
+            <div class="muted">Qty</div>
+            <input id="ei-qty" type="number" min="1" value="1" />
+          </label>
+          <label style="flex:1;">
+            <div class="muted">Price</div>
+            <input id="ei-price" type="number" step="0.01" />
+          </label>
+        </div>
+        <div style="display:flex; gap:12px; margin-top:8px;">
+          <label style="flex:1;">
+            <div class="muted">Category</div>
+            <select id="ei-category">
+              <option value="meat">Meat</option>
+              <option value="dairy">Dairy</option>
+              <option value="vegetables">Vegetable</option>
+              <option value="fruit">Fruit</option>
+              <option value="utility">Utility</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label style="flex:1;">
+            <div class="muted">Consumer</div>
+            <select id="ei-consumer">
+              <option value="grant">Grant</option>
+              <option value="emily">Emily</option>
+              <option value="both">Both</option>
+            </select>
+          </label>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+          <button type="button" id="ei-cancel" class="ghost">Cancel</button>
+          <button type="submit" id="ei-save">Save</button>
+        </div>
+      </form>
+    `;
+    document.body.appendChild(dlg);
+    return dlg;
+  }
+
+  function openItemEditDialog(item) {
+    const dlg = ensureItemEditDialog();
+    const msgEl = dlg.querySelector('#edit-item-msg');
+    const nameEl = dlg.querySelector('#ei-name');
+    const qtyEl = dlg.querySelector('#ei-qty');
+    const priceEl = dlg.querySelector('#ei-price');
+    const catEl = dlg.querySelector('#ei-category');
+    const consEl = dlg.querySelector('#ei-consumer');
+    const cancelBtn = dlg.querySelector('#ei-cancel');
+    const form = dlg.querySelector('#edit-item-form');
+
+    // Reset and fill
+    msgEl.textContent = '';
+    nameEl.value = item.name || '';
+    qtyEl.value = Number(item.quantity) || 1;
+    priceEl.value = (item.price != null && item.price !== '') ? Number(item.price) : '';
+    let category = String(item.category || 'other').toLowerCase();
+    if (category === 'vegetable') category = 'vegetables';
+    catEl.value = ['meat','dairy','vegetables','fruit','utility','other'].includes(category) ? category : 'other';
+    consEl.value = String(item.consumer || 'both').toLowerCase();
+
+    function close(){ if (typeof dlg.close === 'function') dlg.close(); else dlg.open = false; }
+    cancelBtn.onclick = (e)=>{ e.preventDefault(); close(); };
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const name = (nameEl.value || '').trim();
+      const quantity = Number(qtyEl.value) || 1;
+      const price = priceEl.value !== '' ? Number(priceEl.value) : null;
+      let category = (catEl.value || 'other').toLowerCase();
+      if (category === 'vegetable') category = 'vegetables';
+      const consumer = (consEl.value || 'both').toLowerCase();
+      if (!name) { msgEl.textContent = 'Please enter a name'; return; }
+      msgEl.textContent = 'Saving…';
+      const update = { name, quantity, price, category, consumer };
+      const { error } = await sb.from('shopping_list_items').update(update).eq('id', item.id);
+      if (error) { console.error(error); msgEl.textContent = 'Error: ' + (error.message || 'Failed to save'); return; }
+      msgEl.textContent = 'Saved ✓';
+      setTimeout(()=>{ close(); loadItems(); }, 150);
+    };
+
+    if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.open = true;
+    setTimeout(()=>{ try { nameEl.focus(); } catch(_){} }, 0);
+  }
+
+  function renderTotals() {
+    const n = (v) => Number(v) || 0;
+
+    let subtotalGrant = 0;
+    let subtotalEmily = 0;
+
+    items.forEach((i) => {
+      const qty = n(i.quantity) || 1;
+      const line = n(i.price) * qty;
+
+      const consumer = String(i.consumer ?? "both").trim().toLowerCase();
+      const isMeat = String(i.category ?? "").trim().toLowerCase() === "meat";
+
+      if (consumer === "grant") {
+        subtotalGrant += line;
+      } else if (consumer === "emily") {
+        subtotalEmily += line;
+      } else { 
+        if (isMeat) {
+          subtotalGrant += line * 0.60;
+          subtotalEmily += line * 0.40;
+        } else {
+          subtotalGrant += line * 0.50;
+          subtotalEmily += line * 0.50;
+        }
+      }
+    });
+
+    const taxGrant = subtotalGrant * 0.05;
+    const taxEmily = subtotalEmily * 0.05;
+
+    const totalGrant = subtotalGrant + taxGrant;
+    const totalEmily = subtotalEmily + taxEmily;
+
+    const grandTotal = totalGrant + totalEmily;
+
+    totalsEl.innerHTML = `
+      <div>
+        Grant: $${totalGrant.toFixed(2)} <span class="muted">(incl. 5% tax)</span><br/>
+        Emily: $${totalEmily.toFixed(2)} <span class="muted">(incl. 5% tax)</span>
+        <br/><strong>Grand Total: $${grandTotal.toFixed(2)}</strong>
+      </div>
+    `;
+  }
+
+  async function toggleItem(itemId, checked) {
+    const { error } = await sb
+      .from("shopping_list_items")
+      .update({ is_checked: checked })
+      .eq("id", itemId);
+    if (error) { console.error(error); return; }
+    await loadItems();
+  }
+
+  async function deleteItem(itemId) {
+    const { error } = await sb
+      .from("shopping_list_items")
+      .delete()
+      .eq("id", itemId);
+    if (error) { console.error(error); return; }
+    await loadItems();
+  }
+
+  // --- Typeahead: Supabase search as you type
+  const doSearch = debounce(async (q) => {
+    if (!q || q.length < 1) { hideSuggestions(); return; }
+
+    const { data, error } = await sb
+      .from("item_glossary")
+      .select("id, name, price, category, consumer")
+      .ilike("name", `%${q}%`)
+      .order("name", { ascending: true })
+      .limit(12);
+
+    if (error) { console.error(error); hideSuggestions(); return; }
+
+    sugg = data || [];
+    activeIndex = -1;
+    renderSuggestions();
+  }, 180);
+
+  function renderSuggestions() {
+    if (!sugg.length) { hideSuggestions(); return; }
+    gSuggBox.innerHTML = "";
+    sugg.forEach((s, i) => {
+      const el = document.createElement("div");
+      el.className = "sugg" + (i === activeIndex ? " active" : "");
+      el.setAttribute("role", "option");
+      el.dataset.idx = i;
+      el.innerHTML = `
+        <div class="name">${escapeHtml(s.name)}</div>
+        <div class="meta">${s.category ?? ""} ${s.consumer ? "· " + escapeHtml(s.consumer) : ""} ${s.price != null ? "· $" + Number(s.price).toFixed(2) : ""}</div>
+      `;
+      el.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        chooseSuggestion(i);
+      });
+      gSuggBox.appendChild(el);
+    });
+    gSuggBox.classList.remove("hidden");
+  }
+
+  function hideSuggestions() {
+    gSuggBox.classList.add("hidden");
+    gSuggBox.innerHTML = "";
+  }
+
+  function clearTypeahead() {
+    gSearchEl.value = "";
+    gPriceEl.value = "";
+    gQtyEl.value = 1;
+    selectedGlossary = null;
+    sugg = [];
+    activeIndex = -1;
+    hideSuggestions();
+  }
+
+  function chooseSuggestion(i) {
+    const s = sugg[i];
+    if (!s) return;
+    selectedGlossary = s;
+    gSearchEl.value = s.name;
+    gPriceEl.value = s.price ?? "";
+    hideSuggestions();
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  }
+
+  // Keyboard navigation
+  gSearchEl.addEventListener("keydown", (e) => {
+    if (gSuggBox.classList.contains("hidden")) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      activeIndex = Math.min((activeIndex + 1), sugg.length - 1);
+      renderSuggestions();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      activeIndex = Math.max((activeIndex - 1), 0);
+      renderSuggestions();
+    } else if (e.key === "Enter") {
+      if (activeIndex >= 0) {
+        e.preventDefault();
+        chooseSuggestion(activeIndex);
+      }
+    } else if (e.key === "Escape") {
+      hideSuggestions();
+    }
+  });
+
+  gSearchEl.addEventListener("input", (e) => {
+    selectedGlossary = null; 
+    const q = e.target.value.trim();
+    doSearch(q);
+  });
+
+  gSearchEl.addEventListener("blur", () => {
+    setTimeout(() => hideSuggestions(), 100);
+  });
+
+  // Add from glossary
+  async function addFromGlossary() {
+    if (!currentList) return;
+    if (!selectedGlossary) { alert("Pick an item from the suggestions first."); return; }
+
+    const qty = Number(gQtyEl.value) || 1;
+    const price = gPriceEl.value !== "" ? Number(gPriceEl.value) : (selectedGlossary.price ?? null);
+
+    const payload = {
+      list_id: currentList.id,
+      item_id: selectedGlossary.id,
+      name: selectedGlossary.name,
+      price: price,
+      quantity: qty,
+      category: selectedGlossary.category ?? null,
+      consumer: (selectedGlossary.consumer || "both").toLowerCase(),
+      is_checked: false
+    };
+
+    const { error } = await sb.from("shopping_list_items").insert(payload);
+    if (error) { console.error(error); alert("Error adding item"); return; }
+
+    clearTypeahead();
+    await loadItems();
+  }
+
+  // --- Custom item
+  async function addCustom() {
+    if (!currentList) return;
+    const name = (cNameEl.value || "").trim();
+    const qty  = Number(cQtyEl.value) || 1;
+    const price= cPriceEl.value !== "" ? Number(cPriceEl.value) : null;
+
+    if (!name) { alert("Enter a name"); return; }
+
+    const payload = {
+      list_id: currentList.id,
+      name, price, quantity: qty,
+      category: null,
+      consumer: "both",
+      is_checked: false
+    };
+
+    const { error } = await sb.from("shopping_list_items").insert(payload);
+    if (error) { console.error(error); alert("Error adding item"); return; }
+
+    cNameEl.value = ""; cQtyEl.value = 1; cPriceEl.value = "";
+    await loadItems();
+  }
+
+  // --- Events
+  createBtn.addEventListener("click", createList);
+  if (openCreateBtn) {
+    openCreateBtn.addEventListener("click", (e)=>{
+      e.preventDefault();
+      if (createDialog && typeof createDialog.showModal === 'function') createDialog.showModal();
+      else if (createDialog) createDialog.open = true;
+      setTimeout(()=>{ try { listNameEl.focus(); } catch(_){} }, 0);
+    });
+  }
+  if (closeCreate && createDialog) {
+    closeCreate.addEventListener("click", (e)=>{
+      e.preventDefault();
+      if (typeof createDialog.close === 'function') createDialog.close(); else createDialog.open = false;
+    });
+  }
+  refreshLists.addEventListener("click", loadLists);
+
+  closeDetail.addEventListener("click", closeDetailView);
+  deleteListBtn.addEventListener("click", async () => { if (currentList) await deleteList(currentList.id); });
+
+  addFromGlossaryBtn.addEventListener("click", addFromGlossary);
+  if (addCustomBtn) {
+    addCustomBtn.addEventListener("click", addCustom);
+  }
+  refreshItemsBtn.addEventListener("click", loadItems);
+
+  listNameEl.addEventListener("keydown", (e) => { if (e.key === "Enter") createList(); });
+  if (cNameEl) {
+    cNameEl.addEventListener("keydown", (e) => { if (e.key === "Enter") addCustom(); });
+  }
+
+  // First load
+  loadLists();
+});

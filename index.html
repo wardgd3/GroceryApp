@@ -1,39 +1,150 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grocery App</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" defer></script>
-    <script src="js/sb-client.js" defer></script>
-    <script src="js/script.js" defer></script>
-    <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 16px; }
-    </style>
-  </head>
-  <body>
-    <div id="search-container" style="max-width:480px;margin:0 0 12px 0;position:relative;">
-      <input id="grocery-search" placeholder="Search groceries..." autocomplete="off" style="width:100%;padding:10px 12px;font-size:1rem;border:1px solid #ccc;border-radius:8px;">
-      <div id="search-suggestions" style="position:absolute;top:44px;left:0;right:0;background:#fff;border:1px solid #ccc;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.12);display:none;z-index:1100;max-height:260px;overflow:auto;"></div>
-    </div>
-    <button id="add-item-btn" style="margin:1em 0 1em 0;padding:8px 18px;font-size:1.1em;">Add Item</button>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Grocery App</title>
 
-    <!-- Modal for adding item -->
-    <div id="add-item-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0008;z-index:1000;align-items:center;justify-content:center;">
-      <form id="add-item-form" style="background:#fff;padding:2em 2.5em;border-radius:10px;box-shadow:0 2px 16px #0003;display:flex;flex-direction:column;gap:1em;min-width:260px;">
-        <h3 style="margin:0 0 0.5em 0;">Add Grocery Item</h3>
-        <label>Name <input name="name" required></label>
-        <label>Price <input name="price" type="number" step="0.01" required></label>
-        <label>Category <input name="category" required></label>
-        <label>Consumer <input name="consumer" required></label>
-        <div style="display:flex;gap:1em;justify-content:flex-end;">
-          <button type="button" id="cancel-add-item">Cancel</button>
-          <button type="submit">Add</button>
+  <!-- Supabase UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" defer></script>
+
+  <link rel="stylesheet" href="css/style.css" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+  <script src="js/sb-client.js" defer></script>
+  <script src="js/script.js" defer></script>
+  <script src="js/add-glossary-item.js" defer></script>
+  <script src="js/nav.js" defer></script>
+
+</head>
+<body>
+
+  <nav class="top-nav">
+    <a class="brand" href="index.html">GroceryApp</a>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link">Home</a>
+      <a href="glossary.html" class="nav-link">Glossary</a>
+      <a href="#" id="open-add-item-btn" class="nav-link">Add Item</a>
+    </div>
+    <button id="mobile-menu-btn" class="hamburger" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+      <span class="material-icons" aria-hidden="true">menu</span>
+    </button>
+    <div id="mobile-menu" class="mobile-menu" role="menu" aria-labelledby="mobile-menu-btn">
+      <a class="mobile-menu-link" role="menuitem" href="index.html">Home</a>
+      <a class="mobile-menu-link" role="menuitem" href="glossary.html">Glossary</a>
+      <a class="mobile-menu-link" role="menuitem" href="#" id="mobile-add-item-link">Add Item</a>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <!-- Lists -->
+    <section class="card">
+      <div class="split">
+        <h2>Your lists</h2>
+        <div class="actions">
+          <button id="open-create-list-btn">Create List</button>
+          <button class="ghost" id="refresh-lists-btn">Refresh</button>
         </div>
-        <div id="add-item-error" style="color:red;font-size:0.98em;"></div>
-      </form>
-    </div>
+      </div>
+      <div class="list-grid" id="lists-grid"></div>
+      <div class="muted" id="lists-empty" style="margin-top:8px;">No lists yet. Create one above.</div>
+    </section>
 
-    <div id="grocery-table-container"></div>
-  </body>
-  </html>
+    <!-- List Detail -->
+    <section class="card hidden" id="detail">
+      <div class="split">
+        <h2 id="detail-title">List</h2>
+        <div class="actions">
+          <button class="ghost" id="delete-list-btn">Delete list</button>
+          <button class="ghost" id="close-detail-btn">Close</button>
+        </div>
+      </div>
+      <div class="muted" id="detail-subtitle"></div>
+
+      <div class="hr"></div>
+
+      <h3>Add item</h3>
+      <div class="row">
+        <div class="row-4">
+          <!-- Typeahead search -->
+          <label class="typeahead">
+            <div class="muted">Search glossary</div>
+            <input id="g-search" type="text" placeholder="Type to search…" autocomplete="off" style="width:14rem;"/>
+            <div id="g-suggestions" class="suggestions hidden" role="listbox" aria-label="Glossary suggestions"></div>
+          </label>
+
+          <label>
+            <div class="muted">Qty</div>
+            <input id="g-qty" type="number" min="1" value="1"/>
+          </label>
+          <label>
+            <div class="muted">Price</div>
+            <input id="g-price" type="number" step="0.01" placeholder="Auto" />
+          </label>
+          <div style="align-self:end;">
+            <button id="add-from-glossary-btn">Add</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <!--<h3>Add custom item</h3>
+      <div class="row">
+        <div class="row-4">
+          <label>
+            <div class="muted">Name</div>
+            <input id="c-name" type="text" placeholder="Paper towels" />
+          </label>
+          <label>
+            <div class="muted">Qty</div>
+            <input id="c-qty" type="number" min="1" value="1"/>
+          </label>
+          <label>
+            <div class="muted">Price</div>
+            <input id="c-price" type="number" step="0.01" placeholder="0.00"/>
+          </label>
+          <div style="align-self:end;">
+            <button id="add-custom-btn">Add</button>
+          </div>
+        </div>
+      </div>-->
+
+      <div class="hr"></div>
+
+      <h3>Items</h3>
+      <div class="items" id="items"></div>
+      <div class="muted" id="items-empty">No items yet.</div>
+      <div class="hr"></div>
+      <div class="split">
+        <div class="muted" id="totals"></div>
+        <button class="ghost" id="refresh-items-btn">Refresh items</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Create List Dialog -->
+  <dialog id="create-list-dialog">
+    <form method="dialog" style="min-width:320px; max-width:560px;">
+      <h3 style="margin:0 0 8px 0;">Create a new list</h3>
+      <div class="row">
+        <div class="row-3">
+          <label>
+            <div class="muted">List name</div>
+            <input id="list-name" type="text" placeholder="Weekly Groceries" />
+          </label>
+          <label>
+            <div class="muted">Date</div>
+            <input id="list-date" type="date"/>
+          </label>
+          <div style="align-self:end; display:flex; gap:8px;">
+            <button type="button" class="ghost" id="close-create-list">Cancel</button>
+            <button id="create-list-btn" type="submit">Create</button>
+          </div>
+        </div>
+      </div>
+      <div class="muted" id="create-list-msg" style="margin-top:8px;"></div>
+    </form>
+  </dialog>
+</body>
+</html>
