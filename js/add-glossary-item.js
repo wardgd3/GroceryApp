@@ -6,6 +6,54 @@
   const sb = window.sb; // provided by js/sb-client.js
   if (!sb) return; // Supabase client not ready
 
+  // Base categories and helpers for persistence across reloads
+  const BASE_CATEGORIES = ['meat','dairy','vegetables','fruit','utility','other'];
+  const LS_KEY = 'customCategories';
+
+  function normalizeCategory(v){
+    let s = String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (s === 'vegetable') s = 'vegetables';
+    return s || 'other';
+  }
+
+  function loadCustomCategories(){
+    try { return Array.from(new Set(JSON.parse(localStorage.getItem(LS_KEY) || '[]'))); }
+    catch { return []; }
+  }
+
+  function saveCustomCategory(cat){
+    const v = normalizeCategory(cat);
+    const arr = loadCustomCategories();
+    if (!arr.includes(v)){
+      arr.push(v);
+      try { localStorage.setItem(LS_KEY, JSON.stringify(arr)); } catch {}
+    }
+  }
+
+  async function populateCategories(selectEl){
+    const set = new Set(BASE_CATEGORIES);
+    // add local custom categories
+    for (const c of loadCustomCategories()) set.add(normalizeCategory(c));
+    // add distinct categories from DB
+    try {
+      const { data, error } = await sb
+        .from('item_glossary')
+        .select('category')
+        .order('category', { ascending: true });
+      if (!error && Array.isArray(data)){
+        data.forEach(row => {
+          if (row && row.category != null) set.add(normalizeCategory(row.category));
+        });
+      }
+    } catch (_) { /* ignore */ }
+
+    const list = Array.from(set).sort((a,b)=> a.localeCompare(b));
+    selectEl.innerHTML = list.map(v => {
+      const label = v.charAt(0).toUpperCase() + v.slice(1);
+      return `<option value="${v}">${label}</option>`;
+    }).join('');
+  }
+
   function ensureDialog() {
     let dlg = document.getElementById('add-glossary-dialog');
     if (dlg) return dlg;
@@ -28,14 +76,17 @@
         <div style="display:flex; gap:12px; margin-bottom:8px;">
           <label style="flex:1;">
             <div class="muted">Category</div>
-            <select id="agi-category">
-              <option value=\"meat\">Meat</option>
-              <option value=\"dairy\">Dairy</option>
-              <option value=\"vegetables\">Vegetable</option>
-              <option value=\"fruit\">Fruit</option>
-              <option value=\"utility\">Utility</option>
-              <option value=\"other\" selected>Other</option>
-            </select>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <select id="agi-category" style="flex:1;">
+                <option value=\"meat\">Meat</option>
+                <option value=\"dairy\">Dairy</option>
+                <option value=\"vegetables\">Vegetable</option>
+                <option value=\"fruit\">Fruit</option>
+                <option value=\"utility\">Utility</option>
+                <option value=\"other\" selected>Other</option>
+              </select>
+              <button type="button" id="agi-add-category-btn" class="ghost" title="Add category" aria-label="Add category" style="white-space:nowrap; padding:6px 10px;">Add</button>
+            </div>
           </label>
           <label style="flex:1;">
             <div class="muted">Consumer</div>
@@ -56,7 +107,30 @@
     return dlg;
   }
 
-  function openDialog() {
+  function ensureCategoryDialog() {
+    let dlg = document.getElementById('add-category-dialog');
+    if (dlg) return dlg;
+    dlg = document.createElement('dialog');
+    dlg.id = 'add-category-dialog';
+    dlg.innerHTML = `
+      <form id="add-category-form" method="dialog" style="min-width:280px; max-width:420px;">
+        <h3 style="margin:0 0 8px 0;">Add Category</h3>
+        <div class="muted" id="add-category-msg" style="margin-bottom:8px;"></div>
+        <label style="display:block;">
+          <div class="muted">Category name</div>
+          <input id="new-category-name" type="text" placeholder="e.g., Snacks" required />
+        </label>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+          <button type="button" id="add-category-cancel" class="ghost">Cancel</button>
+          <button type="submit" id="add-category-save">Add</button>
+        </div>
+      </form>
+    `;
+    document.body.appendChild(dlg);
+    return dlg;
+  }
+
+  async function openDialog() {
     const dlg = ensureDialog();
     const form = dlg.querySelector('#add-glossary-form');
     const nameEl = dlg.querySelector('#agi-name');
@@ -65,6 +139,10 @@
     const consEl = dlg.querySelector('#agi-consumer');
     const msgEl = dlg.querySelector('#add-glossary-msg');
     const cancelBtn = dlg.querySelector('#agi-cancel');
+    const addCatBtn = dlg.querySelector('#agi-add-category-btn');
+
+    // populate categories each time from base + localStorage + DB
+    await populateCategories(catEl);
 
     // reset
     msgEl.textContent = '';
@@ -78,6 +156,47 @@
     }
 
     cancelBtn.onclick = (e) => { e.preventDefault(); close(); };
+
+    if (addCatBtn) {
+      addCatBtn.onclick = (e) => {
+        e.preventDefault();
+        const cdlg = ensureCategoryDialog();
+        const cForm = cdlg.querySelector('#add-category-form');
+        const cName = cdlg.querySelector('#new-category-name');
+        const cMsg  = cdlg.querySelector('#add-category-msg');
+        const cCancel = cdlg.querySelector('#add-category-cancel');
+
+        cMsg.textContent = '';
+        cName.value = '';
+
+        function closeCat(){ if (typeof cdlg.close === 'function') cdlg.close(); else cdlg.open = false; }
+        cCancel.onclick = (ev)=>{ ev.preventDefault(); closeCat(); };
+
+        cForm.onsubmit = (ev) => {
+          ev.preventDefault();
+          let v = (cName.value || '').trim();
+          if (!v) { cMsg.textContent = 'Please enter a category name'; return; }
+          // normalize
+          v = normalizeCategory(v);
+          // dedupe by value (case-insensitive)
+          const values = Array.from(catEl.options).map(o => String(o.value).toLowerCase());
+          if (!values.includes(v)) {
+            const opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = v.charAt(0).toUpperCase() + v.slice(1);
+            catEl.appendChild(opt);
+          }
+          catEl.value = v;
+          // persist locally so it stays after reloads even if no item saved yet
+          saveCustomCategory(v);
+          cMsg.textContent = 'Added ✓';
+          setTimeout(()=> closeCat(), 150);
+        };
+
+        if (typeof cdlg.showModal === 'function') cdlg.showModal(); else cdlg.open = true;
+        setTimeout(()=>{ try { cName.focus(); } catch(_){} }, 0);
+      };
+    }
 
     form.onsubmit = async (e) => {
       e.preventDefault();
@@ -113,6 +232,11 @@
     if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.open = true;
     // focus first field for convenience
     setTimeout(() => { try { nameEl.focus(); } catch(_){} }, 0);
+  }
+
+  // Expose a safe global opener so other scripts (e.g., glossary.js) can open the dialog
+  if (!window.openAddGlossaryDialog) {
+    window.openAddGlossaryDialog = () => openDialog();
   }
 
   function wireOpeners(){

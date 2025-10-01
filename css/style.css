@@ -140,6 +140,7 @@ dialog#add-item-dialog .row-4 {
 }
 
 @media (max-width: 740px) {
+  #glossary-search {max-width: 19rem;}
   body { padding: 12px; }
   .card { padding: 14px; }
   .row { grid-template-columns: 1fr; }
