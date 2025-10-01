@@ -96,6 +96,13 @@
               <option value="emily">Emily</option>
             </select>
           </label>
+          <label style="flex:1;">
+            <div class="muted">Store</div>
+            <select id="agi-store" required>
+              <option value="walmart" selected>Walmart</option>
+              <option value="sams">Sams</option>
+            </select>
+          </label>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
           <button type="button" id="agi-cancel" class="ghost">Cancel</button>
@@ -137,7 +144,8 @@
     const priceEl = dlg.querySelector('#agi-price');
     const catEl = dlg.querySelector('#agi-category');
     const consEl = dlg.querySelector('#agi-consumer');
-    const msgEl = dlg.querySelector('#add-glossary-msg');
+  const msgEl = dlg.querySelector('#add-glossary-msg');
+  const storeEl = dlg.querySelector('#agi-store');
     const cancelBtn = dlg.querySelector('#agi-cancel');
     const addCatBtn = dlg.querySelector('#agi-add-category-btn');
 
@@ -149,7 +157,8 @@
     nameEl.value = '';
     priceEl.value = '';
     catEl.value = 'other';
-    consEl.value = 'both';
+  consEl.value = 'both';
+  if (storeEl) storeEl.value = 'walmart';
 
     function close() {
       if (typeof dlg.close === 'function') dlg.close(); else dlg.open = false;
@@ -214,7 +223,8 @@
       }
       msgEl.textContent = 'Saving…';
 
-      const payload = { name, price, category, consumer };
+  const store = (storeEl && storeEl.value) ? String(storeEl.value).toLowerCase() : 'walmart';
+  const payload = { name, price, category, consumer, store };
       const { error } = await sb.from('item_glossary').insert(payload);
       if (error) {
         console.error(error);

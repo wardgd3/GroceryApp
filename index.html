@@ -15,6 +15,25 @@
   <script src="js/add-glossary-item.js" defer></script>
   <script src="js/nav.js" defer></script>
 
+  <style>
+    /* Desktop layout for Add Item to List dialog */
+    @media (min-width: 900px) {
+      #add-item-dialog { width: min(90vw, 860px); min-height: 15rem; }
+      #add-item-dialog form .row-4 {
+        display: grid;
+        grid-template-columns: 1fr 120px 160px auto; /* search, qty, price, button */
+        gap: 12px;
+        align-items: end;
+      }
+    }
+    /* General tweaks for consistency */
+    #add-item-dialog form .row-4 label { display: flex; flex-direction: column; }
+    #add-item-dialog form .row-4 .muted { margin-bottom: 4px; }
+    #add-item-dialog form .row-4 input { width: 100%; box-sizing: border-box; }
+    #add-item-dialog .typeahead { position: relative; }
+    #add-item-dialog #g-suggestions { max-height: 260px; overflow: auto; }
+  </style>
+
 </head>
 <body>
 
@@ -22,8 +41,9 @@
     <a class="brand" href="index.html">GroceryApp</a>
     <div class="nav-links">
       <a href="index.html" class="nav-link">Home</a>
-    <a href="glossary.html" class="nav-link">Glossary</a>
-    <a href="#" id="open-add-item-btn" class="nav-link">Add Item</a>
+          <a class="mobile-menu-link" role="menuitem" href="receipt.html">Tickets</a>
+      <a href="glossary.html" class="nav-link">Glossary</a>
+      <a href="#" id="open-add-item-btn" class="nav-link">Add Item</a>
     </div>
     <button id="mobile-menu-btn" class="hamburger" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
       <span class="material-icons" aria-hidden="true">menu</span>
@@ -31,6 +51,7 @@
     <div id="mobile-menu" class="mobile-menu" role="menu" aria-labelledby="mobile-menu-btn">
       <a class="mobile-menu-link" role="menuitem" href="index.html">Home</a>
       <a class="mobile-menu-link" role="menuitem" href="glossary.html">Glossary</a>
+      <a class="mobile-menu-link" role="menuitem" href="receipt.html">Tickets</a>
       <a class="mobile-menu-link" role="menuitem" href="#" id="mobile-add-item-link">Add Item</a>
     </div>
   </nav>
@@ -39,7 +60,7 @@
     <!-- Lists -->
     <section class="card">
       <div class="split">
-        <h2>Your lists</h2>
+        <h2>Active lists</h2>
         <div class="actions">
           <button id="open-create-list-btn">Create List</button>
           <button class="ghost" id="refresh-lists-btn">Refresh</button>
@@ -64,7 +85,7 @@
 
       <!-- Add Item Button (opens glossary add dialog) -->
       <div style="margin-bottom: 1rem;">
-        <button id="detail-add-item-btn" type="button">Add Item</button>
+        <button id="detail-add-item-btn" type="button" style="background-color: rgb(15, 85, 175);border: none;;">Add Item</button>
       </div>
 
       <!-- Add-to-List Dialog (typeahead from glossary, adds to current list) -->
@@ -126,7 +147,10 @@
       <div class="hr"></div>
       <div class="split">
         <div class="muted" id="totals"></div>
-        <button class="ghost" id="refresh-items-btn">Refresh items</button>
+        <div class="actions" style="display:flex; gap:8px;">
+          <button class="ghost" id="create-ticket-btn" style="color:white;background-color: black;">Create Ticket</button>
+          <button class="ghost" id="refresh-items-btn">Refresh items</button>
+        </div>
       </div>
     </section>
 

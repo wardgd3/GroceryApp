@@ -101,6 +101,7 @@ dialog#add-item-dialog {
   padding: 12px;
   max-height: 90vh;
   overflow: auto;
+  margin-top: 5rem;
 }
 dialog#add-item-dialog .row-4 {
   grid-template-columns: 2fr 1fr 1fr auto;
@@ -122,6 +123,7 @@ dialog#add-item-dialog .row-4 {
 
 /* ====== Typeahead ====== */
 .typeahead { position: relative; }
+.typeahead { z-index: 5; overflow: visible; }
 .typeahead input { width: 100%; }
 .suggestions {
   position: absolute; top: 100%; left: 0; right: 0;
@@ -129,6 +131,13 @@ dialog#add-item-dialog .row-4 {
   margin-top: 6px; padding: 6px; z-index: 30; box-shadow: 0 8px 20px rgba(0,0,0,0.08);
   max-height: 260px; overflow: auto;
 }
+.suggestions { z-index: 9999; }
+
+/* Ensure no clipping for suggestions in the Add Item dialog on desktop */
+dialog#add-item-dialog,
+dialog#add-item-dialog form,
+dialog#add-item-dialog .row-4,
+dialog#add-item-dialog .typeahead { overflow: visible; }
 .sugg { padding: 8px 10px; border-radius: 8px; display:flex; justify-content: space-between; gap: 10px; cursor: pointer; }
 .sugg:hover, .sugg.active { background: #f3f4f6; }
 .sugg .name { font-weight: 600; }

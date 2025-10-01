@@ -41,6 +41,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const itemsBox  = document.getElementById("items");
   const itemsEmpty= document.getElementById("items-empty");
   const refreshItemsBtn = document.getElementById("refresh-items-btn");
+  const createTicketBtn = document.getElementById("create-ticket-btn");
   const totalsEl  = document.getElementById("totals");
 
   // --- State
@@ -49,6 +50,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let sugg = [];              
   let activeIndex = -1;       
   let selectedGlossary = null; 
+  // Cache: glossary item_id -> store ('walmart' | 'sams' | null)
+  const glossaryStoreCache = new Map();
 
   // --- Helpers
   function fmtDateInput(d = new Date()) {
@@ -198,6 +201,21 @@ document.addEventListener("DOMContentLoaded", () => {
     if (error) { console.error(error); msg(itemsEmpty, "Error loading items"); return; }
 
     items = data || [];
+    // Warm store cache for any glossary-backed items
+    try {
+      const missing = Array.from(new Set((items || [])
+        .map(i => i.item_id)
+        .filter(id => id != null && !glossaryStoreCache.has(id))));
+      if (missing.length) {
+        const { data: gRows, error: gErr } = await sb
+          .from('item_glossary')
+          .select('id, store')
+          .in('id', missing);
+        if (!gErr && Array.isArray(gRows)) {
+          gRows.forEach(r => { if (r && r.id != null) glossaryStoreCache.set(r.id, (r.store || null)); });
+        }
+      }
+    } catch(_) {}
     if (items.length === 0) {
       msg(itemsEmpty, "No items yet.");
       totalsEl.textContent = "";
@@ -373,6 +391,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let subtotalGrant = 0;
     let subtotalEmily = 0;
+    let taxGrant = 0;
+    let taxEmily = 0;
 
     items.forEach((i) => {
       const qty = n(i.quantity) || 1;
@@ -381,23 +401,37 @@ document.addEventListener("DOMContentLoaded", () => {
       const consumer = String(i.consumer ?? "both").trim().toLowerCase();
       const isMeat = String(i.category ?? "").trim().toLowerCase() === "meat";
 
+      // Determine per-item tax rate by store
+      let store = null;
+      if (i.item_id != null && glossaryStoreCache.has(i.item_id)) {
+        store = glossaryStoreCache.get(i.item_id);
+      }
+      const rate = (String(store).toLowerCase() === 'sams') ? 0.01 : 0.063;
+
       if (consumer === "grant") {
         subtotalGrant += line;
+        taxGrant += line * rate;
       } else if (consumer === "emily") {
         subtotalEmily += line;
+        taxEmily += line * rate;
       } else { 
         if (isMeat) {
-          subtotalGrant += line * 0.60;
-          subtotalEmily += line * 0.40;
+          const gPart = line * 0.60;
+          const ePart = line * 0.40;
+          subtotalGrant += gPart;
+          subtotalEmily += ePart;
+          taxGrant += gPart * rate;
+          taxEmily += ePart * rate;
         } else {
-          subtotalGrant += line * 0.50;
-          subtotalEmily += line * 0.50;
+          const gPart = line * 0.50;
+          const ePart = line * 0.50;
+          subtotalGrant += gPart;
+          subtotalEmily += ePart;
+          taxGrant += gPart * rate;
+          taxEmily += ePart * rate;
         }
       }
     });
-
-    const taxGrant = subtotalGrant * 0.05;
-    const taxEmily = subtotalEmily * 0.05;
 
     const totalGrant = subtotalGrant + taxGrant;
     const totalEmily = subtotalEmily + taxEmily;
@@ -406,11 +440,81 @@ document.addEventListener("DOMContentLoaded", () => {
 
     totalsEl.innerHTML = `
       <div>
-        Grant: $${totalGrant.toFixed(2)} <span class="muted">(incl. 5% tax)</span><br/>
-        Emily: $${totalEmily.toFixed(2)} <span class="muted">(incl. 5% tax)</span>
+  Grant: $${totalGrant.toFixed(2)} <span class="muted">(incl. item-based tax)</span><br/>
+  Emily: $${totalEmily.toFixed(2)} <span class="muted">(incl. item-based tax)</span>
         <br/><strong>Grand Total: $${grandTotal.toFixed(2)}</strong>
       </div>
     `;
+  }
+
+  async function createTicketsForCurrentList() {
+    if (!currentList) { alert('Open a list first.'); return; }
+    if (!items || !items.length) { alert('No items in this list.'); return; }
+
+  // Recompute totals using the same logic as renderTotals with item-based tax
+    const n = (v) => Number(v) || 0;
+  let subtotalGrant = 0;
+  let subtotalEmily = 0;
+  let taxGrant = 0;
+  let taxEmily = 0;
+
+    items.forEach((i) => {
+      const qty = n(i.quantity);
+      const price = n(i.price);
+      const line = qty * price;
+      const cons = String(i.consumer || 'both').toLowerCase();
+      const cat  = String(i.category || '').toLowerCase();
+      // Determine per-item tax rate by store
+      let store = null;
+      if (i.item_id != null && glossaryStoreCache.has(i.item_id)) {
+        store = glossaryStoreCache.get(i.item_id);
+      }
+      const rate = (String(store).toLowerCase() === 'sams') ? 0.01 : 0.063;
+
+      if (cons === 'grant') {
+        subtotalGrant += line;
+        taxGrant += line * rate;
+      } else if (cons === 'emily') {
+        subtotalEmily += line;
+        taxEmily += line * rate;
+      } else {
+        // both
+        if (cat === 'meat') {
+          const gPart = line * 0.6;
+          const ePart = line * 0.4;
+          subtotalGrant += gPart;
+          subtotalEmily += ePart;
+          taxGrant += gPart * rate;
+          taxEmily += ePart * rate;
+        } else {
+          const gPart = line * 0.5;
+          const ePart = line * 0.5;
+          subtotalGrant += gPart;
+          subtotalEmily += ePart;
+          taxGrant += gPart * rate;
+          taxEmily += ePart * rate;
+        }
+      }
+    });
+
+    const totalGrant = subtotalGrant + taxGrant;
+    const totalEmily = subtotalEmily + taxEmily;
+
+    // Confirm action
+    if (!confirm(`Create tickets for this list?\nGrant: $${totalGrant.toFixed(2)}\nEmily: $${totalEmily.toFixed(2)}`)) return;
+
+    // Insert two rows into ticket table
+    try {
+      const payload = [
+        { list_id: currentList.id, name: currentList.list_name, person: 'grant', amount_due: Number(totalGrant.toFixed(2)), status: 'open', created_at: new Date().toISOString() },
+        { list_id: currentList.id, name: currentList.list_name, person: 'emily', amount_due: Number(totalEmily.toFixed(2)), status: 'open', created_at: new Date().toISOString() }
+      ];
+      const { error } = await sb.from('ticket').insert(payload);
+      if (error) { alert('Error creating tickets: ' + (error.message || 'Unknown')); return; }
+      alert('Tickets created ✓');
+    } catch (e) {
+      alert('Error creating tickets: ' + e.message);
+    }
   }
 
   async function toggleItem(itemId, checked) {
@@ -643,6 +747,7 @@ document.addEventListener("DOMContentLoaded", () => {
     addCustomBtn.addEventListener("click", addCustom);
   }
   refreshItemsBtn.addEventListener("click", loadItems);
+  if (createTicketBtn) createTicketBtn.addEventListener('click', createTicketsForCurrentList);
 
   listNameEl.addEventListener("keydown", (e) => { if (e.key === "Enter") createList(); });
   if (cNameEl) {

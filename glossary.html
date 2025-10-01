@@ -19,6 +19,17 @@
 		.filter-panel { display: none; max-width: 680px; margin: 0 auto 16px auto; padding: 12px; border: 1px solid #ddd; border-radius: 8px; }
 		.filter-chip { display: inline-block; margin: 6px 8px 0 0; padding: 6px 10px; border: 1px solid #ccc; border-radius: 999px; cursor: pointer; user-select: none; }
 		.filter-chip.active { background: #0ea5e9; color: #fff; border-color: #0ea5e9; }
+		.filter-row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+		.filter-actions { display:flex; gap:8px; flex-wrap:wrap; }
+		.filter-chips { display:flex; flex-wrap:wrap; gap:6px; }
+		.filter-chips .filter-chip { margin: 4px 6px 0 0; }
+		.add-btn { font-size:1.3em; font-weight:bold; padding:4px 12px; }
+		@media (max-width: 480px) {
+		  .filter-panel { padding: 10px; }
+		  .filter-row { gap:6px; }
+		  .filter-actions button { padding:6px 10px; }
+		  .add-btn { padding:6px 10px; }
+		}
 		.section { max-width: 780px; margin: 0 auto 18px auto; }
 		.section h2 { margin: 18px 0 8px 0; border-bottom: 1px solid #eee; padding-bottom: 4px; }
 		.item { padding: 6px 2px; border-bottom: 1px dashed #eee; }
@@ -32,6 +43,7 @@
 
   <div class="nav-links">
     <a href="index.html" class="nav-link">Home</a>
+	    <a class="mobile-menu-link" role="menuitem" href="receipt.html">Tickets</a>
     <a href="glossary.html" class="nav-link">Glossary</a>
 		<a href="#" id="open-add-item-btn" class="nav-link">Add Item</a>
   </div>
@@ -43,6 +55,7 @@
   <div id="mobile-menu" class="mobile-menu" role="menu" aria-labelledby="mobile-menu-btn">
     <a class="mobile-menu-link" role="menuitem" href="index.html">Home</a>
     <a class="mobile-menu-link" role="menuitem" href="glossary.html">Glossary</a>
+	<a class="mobile-menu-link" role="menuitem" href="receipt.html">Tickets</a>
 		<a class="mobile-menu-link" role="menuitem" href="#" id="mobile-add-item-link">Add Item</a>
   </div>
 </nav>

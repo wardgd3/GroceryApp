@@ -101,10 +101,11 @@
     for (const k of keys){
       html += `<section class="g-section"><h2>${k}</h2>`;
       for (const it of groups.get(k)){
-        const parts = [];
-        if (it.category) parts.push(`<span class="g-tag">${escapeHtml(it.category)}</span>`);
-        if (typeof it.price === 'number') parts.push(`<span class="g-tag">$${Number(it.price).toFixed(2)}</span>`);
-        if (it.consumer) parts.push(`<span class="g-tag">${escapeHtml(it.consumer)}</span>`);
+  const parts = [];
+  if (it.category) parts.push(`<span class="g-tag">${escapeHtml(it.category)}</span>`);
+  if (typeof it.price === 'number') parts.push(`<span class="g-tag">$${Number(it.price).toFixed(2)}</span>`);
+  if (it.store) parts.push(`<span class="g-tag">${escapeHtml(String(it.store))}</span>`);
+  if (it.consumer) parts.push(`<span class="g-tag">${escapeHtml(it.consumer)}</span>`);
         const meta = parts.join('<span class="g-sep">•</span>');
         html += `
           <div class="g-item">
@@ -133,7 +134,7 @@
   }
 
   async function fetchItems(){
-    let query = sb.from('item_glossary').select('id, name, price, category, consumer');
+    let query = sb.from('item_glossary').select('id, name, price, category, consumer, store');
     if (currentTerm){
       const like = `%${currentTerm}%`;
       query = query.or(`name.ilike.${like},category.ilike.${like},consumer.ilike.${like}`);
@@ -270,6 +271,13 @@
               <option value="emily">Emily</option>
             </select>
           </label>
+          <label style="flex:1;">
+            <div class="muted">Store</div>
+            <select id="eg-store">
+              <option value="walmart">Walmart</option>
+              <option value="sams">Sams</option>
+            </select>
+          </label>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
           <button type="button" id="eg-cancel" class="ghost">Cancel</button>
@@ -289,7 +297,8 @@
     const priceEl = dlg.querySelector('#eg-price');
     const catEl = dlg.querySelector('#eg-category');
     const consEl = dlg.querySelector('#eg-consumer');
-    const cancelBtn = dlg.querySelector('#eg-cancel');
+  const cancelBtn = dlg.querySelector('#eg-cancel');
+  const storeEl = dlg.querySelector('#eg-store');
 
     // Ensure an Add button appears next to the category select
     let addCatBtn = dlg.querySelector('#eg-add-category-btn');
@@ -318,7 +327,8 @@
     nameEl.value = item.name || '';
     priceEl.value = (item.price != null && item.price !== '') ? Number(item.price) : '';
     catEl.value = currentCategory;
-    consEl.value = String(item.consumer || 'both').toLowerCase();
+  consEl.value = String(item.consumer || 'both').toLowerCase();
+  if (storeEl) storeEl.value = String(item.store || 'walmart').toLowerCase() === 'sams' ? 'sams' : 'walmart';
 
     function close(){ if (typeof dlg.close === 'function') dlg.close(); else dlg.open = false; }
     cancelBtn.onclick = (e)=>{ e.preventDefault(); close(); };
@@ -384,7 +394,8 @@
       const consumer = (consEl.value || 'both').toLowerCase();
       if (!name){ msgEl.textContent = 'Please enter a name'; return; }
       msgEl.textContent = 'Saving…';
-      const update = { name, price, category, consumer };
+  const store = (storeEl && storeEl.value) ? String(storeEl.value).toLowerCase() : 'walmart';
+  const update = { name, price, category, consumer, store };
       const { error } = await sb.from('item_glossary').update(update).eq('id', item.id);
       if (error){ msgEl.textContent = 'Error: ' + (error.message || 'Failed to save'); return; }
       msgEl.textContent = 'Saved ✓';
@@ -403,14 +414,14 @@
       return `<label class="filter-chip"><input type="checkbox" id="${id}" data-cat="${cat}" ${checked} style="margin-right:6px;">${cat}</label>`;
     }).join('');
 
-    // Row with filter, clear, and right-aligned + button
+    // Row with filter, clear, and right-aligned + button (CSS classes for responsive layout)
     const filterRow = `
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
-        <div style="display:flex; gap:8px;">
+      <div class="filter-row">
+        <div class="filter-actions">
           <button id="toggle-filter" class="ghost" type="button">Filter</button>
           <button id="clear-filter" class="ghost" type="button">Clear</button>
         </div>
-        <button id="fp-add-glossary-btn" class="ghost" title="Add glossary item" aria-label="Add glossary item" style="font-size:1.3em; font-weight:bold; padding:4px 12px;">+</button>
+        <button id="fp-add-glossary-btn" class="ghost add-btn" title="Add glossary item" aria-label="Add glossary item">+</button>
       </div>
     `;
 
@@ -418,7 +429,8 @@
       <div style="margin-top:10px;">
         <button id="manage-categories-btn" class="ghost">Manage categories</button>
       </div>`;
-    filterPanel.innerHTML = filterRow + chips + manageBtn;
+    const chipsWrap = `<div class="filter-chips">${chips}</div>`;
+    filterPanel.innerHTML = filterRow + chipsWrap + manageBtn;
 
     // Wire up the new + button (scoped to filter panel to avoid conflicts with any static toolbar)
     const addBtn = filterPanel.querySelector('#fp-add-glossary-btn');
