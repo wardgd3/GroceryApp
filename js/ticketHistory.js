@@ -1,8 +1,5 @@
 // js/ticketHistory.js
 (function(){
-	const sb = window.sb;
-	if (!sb) return;
-
 	// Resolve a ticket atomically using a Postgres function (see SQL below)
 	async function resolveTicketAtomic({
 		ticketId,
@@ -11,6 +8,8 @@
 		tags = null,
 		metadata = null
 	}){
+		const sb = window.sb;
+		if (!sb) throw new Error('Supabase client not ready');
 		try {
 			// Get current user for resolved_by field
 			const { data: sessionData } = await sb.auth.getUser();
@@ -32,9 +31,13 @@
 		}
 	}
 
-	// Expose globally for reuse from tickets UI
+	// Expose globally for reuse from tickets UI, regardless of initial sb timing
 	window.resolveTicketAtomic = resolveTicketAtomic;
 })();
+
+document.getElementById('refresh-tickets-btn').onclick = () => {
+  window.location.href = 'receipt.html';
+};
 
 /*
 -- SQL to create the RPC and ensure atomic insert into ticket_history

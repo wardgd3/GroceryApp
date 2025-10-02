@@ -79,6 +79,8 @@ body {
 input, button { font: inherit; padding: 10px; border:1px solid var(--line); border-radius:10px; }
 button { background:#111827; color:white; cursor:pointer; }
 button.ghost { background:transparent; color:#111827; border:1px solid var(--line); }
+button[disabled] { opacity: 0.6; cursor: not-allowed; }
+.primary[disabled] { background: #e5e7eb; color: #9ca3af; border-color: #e5e7eb; }
 .list-grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
 .muted { color: var(--muted); font-size: 0.9rem; }
 .items { display:flex; flex-direction: column; gap: 8px; margin-top: 8px; }
@@ -189,6 +191,32 @@ dialog#add-item-dialog .typeahead { overflow: visible; }
 .g-meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; color: var(--muted); }
 .g-tag { background:#f3f4f6; color:#374151; padding:2px 8px; border-radius:999px; font-size:.85rem; }
 .g-sep { color:#c4c4c4; margin: 0 2px; }
+
+/* Tickets: paid button and resolve button */
+.btn-paid {
+  background: #16a34a;
+  color: #fff;
+  border-color: #16a34a;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-paid .checkmark {
+  display: inline-block;
+  width: 16px; height: 16px;
+  border-radius: 4px;
+  position: relative;
+}
+.btn-paid .checkmark:after {
+  content: '';
+  position: absolute;
+  left: 4px; top: 1px;
+  width: 6px; height: 10px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.ticket-foot .resolve-wrap { margin-left: auto; }
 
 @media (max-width: 740px) {
   .g-item { grid-template-columns: 1fr; padding: 8px 0; }
