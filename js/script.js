@@ -1,6 +1,7 @@
 // js/script.js
 document.addEventListener("DOMContentLoaded", () => {
-  if (!window.sb) return;
+  // Bind Supabase client (may be undefined initially due to script load order)
+  let sb = window.sb;
 
   // --- Elements
   const listNameEl   = document.getElementById("list-name");
@@ -448,8 +449,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function createTicketsForCurrentList() {
-    if (!currentList) { alert('Open a list first.'); return; }
-    if (!items || !items.length) { alert('No items in this list.'); return; }
+    if (!window.sb) { alert('Supabase not ready yet. Please try again.'); return false; }
+    if (!currentList) { alert('Open a list first.'); return false; }
+    if (!items || !items.length) { alert('No items in this list.'); return false; }
 
   // Recompute totals using the same logic as renderTotals with item-based tax
     const n = (v) => Number(v) || 0;
@@ -501,7 +503,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const totalEmily = subtotalEmily + taxEmily;
 
     // Confirm action
-    if (!confirm(`Create tickets for this list?\nGrant: $${totalGrant.toFixed(2)}\nEmily: $${totalEmily.toFixed(2)}`)) return;
+  if (!confirm(`Create tickets for this list?\nGrant: $${totalGrant.toFixed(2)}\nEmily: $${totalEmily.toFixed(2)}`)) return false;
 
     // Insert two rows into ticket table
     try {
@@ -510,10 +512,12 @@ document.addEventListener("DOMContentLoaded", () => {
         { list_id: currentList.id, name: currentList.list_name, person: 'emily', amount_due: Number(totalEmily.toFixed(2)), status: 'open', created_at: new Date().toISOString() }
       ];
       const { error } = await sb.from('ticket').insert(payload);
-      if (error) { alert('Error creating tickets: ' + (error.message || 'Unknown')); return; }
+      if (error) { alert('Error creating tickets: ' + (error.message || 'Unknown')); return false; }
       alert('Tickets created ✓');
+      return true;
     } catch (e) {
       alert('Error creating tickets: ' + e.message);
+      return false;
     }
   }
 
@@ -746,14 +750,44 @@ document.addEventListener("DOMContentLoaded", () => {
   if (addCustomBtn) {
     addCustomBtn.addEventListener("click", addCustom);
   }
-  refreshItemsBtn.addEventListener("click", loadItems);
-  if (createTicketBtn) createTicketBtn.addEventListener('click', createTicketsForCurrentList);
+  if (refreshItemsBtn) refreshItemsBtn.addEventListener("click", loadItems);
+  if (createTicketBtn) {
+    createTicketBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (createTicketBtn.disabled) return;
+      createTicketBtn.disabled = true;
+      try {
+        const ok = await createTicketsForCurrentList();
+        if (ok) {
+          // Navigate to tickets page so user sees the new cards
+          window.location.href = 'receipt.html';
+        }
+      } finally {
+        createTicketBtn.disabled = false;
+      }
+    });
+  }
 
   listNameEl.addEventListener("keydown", (e) => { if (e.key === "Enter") createList(); });
   if (cNameEl) {
     cNameEl.addEventListener("keydown", (e) => { if (e.key === "Enter") addCustom(); });
   }
 
-  // First load
-  loadLists();
+  // First load: wait for Supabase client if not yet ready so we don't abort setup
+  if (window.sb) {
+    loadLists();
+  } else {
+    const start = Date.now();
+    const iv = setInterval(() => {
+      if (window.sb) {
+        clearInterval(iv);
+        sb = window.sb;
+        loadLists();
+      } else if (Date.now() - start > 6000) {
+        clearInterval(iv);
+        console.warn('Supabase client not ready after 6s; retry actions manually.');
+      }
+    }, 100);
+  }
 });
