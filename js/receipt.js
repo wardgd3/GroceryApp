@@ -331,7 +331,8 @@
                 e.stopPropagation();
                 const listId = resolveBtn.getAttribute('data-resolve');
                 const group = lastGroups.get(listId) || [];
-                const allPaid = group.length > 0 && group.every(t => t.status === 'paid' || t.status === 'resolved');
+                // Consider localStorage-paid flags in addition to DB status
+                const allPaid = group.length > 0 && group.every(t => (t.status === 'paid' || t.status === 'resolved' || isPaidLocal(t.id)));
                 if (!allPaid) {
                     alert('All rows must be paid before resolving.');
                     return;
