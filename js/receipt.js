@@ -171,12 +171,12 @@
                 const headerCreated = items[0]?.created_at ? new Date(items[0].created_at).toLocaleString() : '';
                 const listName = items[0]?.name || items[0]?.list_name || listId;
 
-                const allPaid = items.every(t => t.status === 'paid' || t.status === 'resolved');
+                const allPaid = items.every(t => t.status === 'paid' || t.status === 'resolved' || isPaidLocal(t.id));
 
                 const rowsHtml = items.map(t => {
                     let actionHtml = '';
                     if (!isHistory) {
-                        const isPaid = (t.status === 'paid');
+                        const isPaid = (t.status === 'paid' || isPaidLocal(t.id));
                         actionHtml = isPaid
                           ? `<button class="btn-paid" data-toggle-pay="${t.id}" data-current="paid" type="button"><span class="checkmark"></span> Paid</button>`
                           : `<button class="ghost" data-toggle-pay="${t.id}" data-current="open" type="button">Mark paid</button>`;
@@ -194,9 +194,11 @@
 
                 const total = items.reduce((s, t)=> s + Number(t.amount_due||0), 0);
 
+                const reviewBtn = `<button class="ghost" data-review="${listId}" type="button">Review</button>`;
                 const actionBtn = (isHistory)
-                    ? `<div class="resolve-wrap"><button class="ghost" data-delete-history="${listId}">Delete</button></div>`
+                    ? `<div class="resolve-wrap">${reviewBtn} <button class="ghost" data-delete-history="${listId}">Delete</button></div>`
                     : `<div class="resolve-wrap" style="display:flex; gap:8px;">
+                        ${reviewBtn}
                         <button class="primary" data-resolve="${listId}" ${allPaid ? '' : 'disabled'}>Resolve</button>
                     </div>`;
 
@@ -307,6 +309,18 @@
                  const msg = upErr ? (upErr.message || 'Unknown') : 'No rows updated';
                     alert('Error updating status: ' + msg);
                     return;
+                }
+                return;
+            }
+
+            const reviewBtn = e.target.closest('[data-review]');
+            if (reviewBtn) {
+                e.preventDefault();
+                const listId = reviewBtn.getAttribute('data-review');
+                try {
+                    await openReviewDialog(listId);
+                } catch (err) {
+                    alert('Failed to load review: ' + (err?.message || 'Unknown error'));
                 }
                 return;
             }
@@ -438,6 +452,9 @@
                         console.warn('Shopping list delete threw:', delEx);
                     }
 
+                    // Clear any saved local Paid flags for tickets in this list
+                    try { clearPaidForIds(ids); } catch(_) {}
+
                     await loadTickets();
                     // Safety: if the card still exists due to a race, remove it now
                     try {
@@ -478,3 +495,120 @@
         loadTickets();
     });
 })();
+
+// ---- Review dialog logic ----
+async function openReviewDialog(listId){
+    const sb = window.sb;
+    const dlg = document.getElementById('review-dialog');
+    const content = document.getElementById('review-content');
+    const title = document.getElementById('review-title');
+    if (!sb || !dlg || !content) return;
+
+    content.innerHTML = '<div class="muted">Loading…</div>';
+
+    // Fetch list name
+    let listName = `List ${listId}`;
+    try {
+        const { data: listRows, error: listErr } = await sb
+            .from('shopping_lists')
+            .select('list_name')
+            .eq('id', listId)
+            .limit(1);
+        if (!listErr && Array.isArray(listRows) && listRows[0]?.list_name) {
+            listName = listRows[0].list_name;
+        }
+    } catch {}
+    if (title) title.textContent = `Order Review — ${listName}`;
+
+    // Try to load from history receipt_jsonb first if listId looks like a UUID present in history
+    let items = [];
+    try {
+        const { data: hist } = await sb.from('ticket_history').select('receipt_jsonb').eq('id', listId).limit(1);
+        const rec = Array.isArray(hist) && hist[0]?.receipt_jsonb;
+        if (rec && Array.isArray(rec.items)) {
+            items = rec.items;
+        }
+    } catch {}
+
+    if (!items.length) {
+        // Active list: join shopping_list_items with item_glossary when available
+        const { data, error } = await sb
+            .from('shopping_list_items')
+            .select('id, name, price, quantity, category, item_glossary ( name, price, category, store )')
+            .eq('list_id', listId)
+            .order('sort_order', { ascending: true });
+
+        if (error) {
+            content.innerHTML = `<div class="muted">Failed to load items: ${escapeHtml(error.message)}</div>`;
+            showDialog(dlg);
+            return;
+        }
+
+        items = (data || []).map(r => {
+            const g = r.item_glossary?.[0] || r.item_glossary; // handle nested object/array
+            return {
+                name: r.name || g?.name || 'Item',
+                price: Number((r.price ?? g?.price) || 0),
+                quantity: Number(r.quantity || 1),
+                category: r.category || g?.category || null,
+                store: g?.store || null
+            };
+        });
+    }
+
+    // Compute totals
+    let subtotal = 0;
+    items.forEach(it => { subtotal += Number(it.price || 0) * Number(it.quantity || 1); });
+
+    const rows = items.map((it, i) => `
+        <tr>
+            <td>${i+1}</td>
+            <td>${escapeHtml(it.name || '')}</td>
+            <td class="muted">${escapeHtml(it.category || '')}</td>
+            <td style="text-align:right;">${Number(it.quantity||1)}</td>
+            <td style="text-align:right;">$${Number(it.price||0).toFixed(2)}</td>
+            <td style="text-align:right;">$${(Number(it.price||0)*Number(it.quantity||1)).toFixed(2)}</td>
+        </tr>`).join('');
+
+    const html = `
+        <div class="muted" style="margin-bottom:8px;">Review the items for this order.</div>
+        <div style="overflow:auto; max-height:60vh;">
+            <table class="loot-table" style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr>
+                        <th>#</th><th>Item</th><th>Category</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:right;">Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows || '<tr><td colspan="6" class="muted">No items</td></tr>'}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="5" style="text-align:right; font-weight:600;">Total</td>
+                        <td style="text-align:right; font-weight:600;">$${subtotal.toFixed(2)}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    `;
+
+    content.innerHTML = html;
+    showDialog(dlg);
+}
+
+function showDialog(dlg){
+    try {
+        if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.open = true;
+    } catch { dlg.open = true; }
+}
+
+    // Global HTML escaper for safe rendering
+    function escapeHtml(s){
+        return String(s || '').replace(/[&<>"']/g, c => ({
+            '&':'&amp;',
+            '<':'&lt;',
+            '>':'&gt;',
+            '"':'&quot;',
+            "'":'&#39;'
+        })[c] || c);
+    }

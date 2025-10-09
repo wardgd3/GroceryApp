@@ -48,6 +48,17 @@
 				<div id="tickets-empty" class="muted">No tickets yet.</div>
 				<div id="tickets-list" style="display:flex; flex-direction:column; gap:12px;"></div>
 			</section>
+
+			<!-- Review Dialog -->
+			<dialog id="review-dialog" aria-labelledby="review-title">
+				<form method="dialog" style="margin:0;">
+					<header style="display:flex; align-items:center; gap:8px;">
+						<h3 id="review-title" style="margin:0;">Order Review</h3>
+						<button type="submit" class="ghost" style="margin-left:auto;">Close</button>
+					</header>
+					<div id="review-content" style="margin-top:10px;"></div>
+				</form>
+			</dialog>
 		</main>
 	</body>
 	</html>

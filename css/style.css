@@ -121,6 +121,26 @@ dialog#add-item-dialog {
 dialog#add-item-dialog .row-4 {
   grid-template-columns: 2fr 1fr 1fr auto;
 }
+
+/* ====== Review dialog ====== */
+dialog#review-dialog {
+  width: calc(100vw - 24px);
+  max-width: 720px;
+  margin: 0 auto;
+  border-radius: 12px;
+  padding: 12px;
+  max-height: 90vh;
+  overflow: auto;
+  margin-top: 5rem;
+}
+dialog#review-dialog table th,
+dialog#review-dialog table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 600px) {
+  dialog#review-dialog { max-width: 100%; }
+}
 @media (max-width: 600px) {
   dialog#add-item-dialog .row-4 {
     grid-template-columns: 1fr;
