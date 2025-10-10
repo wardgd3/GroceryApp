@@ -3,24 +3,9 @@
     document.addEventListener('DOMContentLoaded', () => {
         const sb = window.sb;
         if (!sb) return;
+        try { console.info('receipt.js v2025-10-09a loaded'); } catch {}
 
-        // Local paid-state persistence (per ticket id)
-        const PAID_LS_KEY = 'ticket_paid_v1';
-        const getPaidState = () => { try { return JSON.parse(localStorage.getItem(PAID_LS_KEY) || '{}'); } catch { return {}; } };
-        const setPaidState = (id, paid) => {
-            const map = getPaidState(); const k = String(id);
-            if (paid) map[k] = 1; else delete map[k];
-            localStorage.setItem(PAID_LS_KEY, JSON.stringify(map));
-        };
-        const isPaidLocal = (id) => !!getPaidState()[String(id)];
-        const clearPaidForIds = (ids=[]) => {
-            const map = getPaidState(); let changed = false;
-            for (const id of ids) {
-                const k = String(id);
-                if (k in map) { delete map[k]; changed = true; }
-            }
-            if (changed) localStorage.setItem(PAID_LS_KEY, JSON.stringify(map));
-        };
+        // Mark Paid persistence now relies solely on the DB column `ticket.resolved`.
 
         const listEl = document.getElementById('tickets-list');
         const empty = document.getElementById('tickets-empty');
@@ -84,7 +69,7 @@
                 // Active view from ticket table
                 // Base query
                 let query = sb.from('ticket')
-                    .select('id, list_id, name, person, amount_due, status, created_at, shopping_lists!inner (list_name)')
+                    .select('id, list_id, name, person, amount_due, status, resolved, created_at, shopping_lists!inner (list_name)')
                     .order('created_at', { ascending: false });
 
                 query = query.neq('status', 'resolved');
@@ -98,6 +83,7 @@
                         person: r.person,
                         amount_due: r.amount_due,
                         status: String(r.status || '').toLowerCase(),
+                        resolved: !!r.resolved,
                         created_at: r.created_at,
                         list_name: r.shopping_lists?.list_name || ''
                     }));
@@ -117,7 +103,7 @@
 
                     const { data: bare, error: e2 } = await sb
                         .from('ticket')
-                        .select('id, list_id, name, person, amount_due, status, created_at')
+                        .select('id, list_id, name, person, amount_due, status, resolved, created_at')
                         .neq('status', 'resolved')
                         .order('created_at', { ascending: false });
                     if (e2) {
@@ -132,6 +118,7 @@
                         person: r.person,
                         amount_due: r.amount_due,
                         status: String(r.status || '').toLowerCase(),
+                        resolved: !!r.resolved,
                         created_at: r.created_at
                     }));
                     rows = listIdSet ? baseRows.filter(r => listIdSet.has(r.list_id)) : baseRows;
@@ -171,16 +158,17 @@
                 const headerCreated = items[0]?.created_at ? new Date(items[0].created_at).toLocaleString() : '';
                 const listName = items[0]?.name || items[0]?.list_name || listId;
 
-                const allPaid = items.every(t => t.status === 'paid' || t.status === 'resolved' || isPaidLocal(t.id));
+                const allPaid = items.every(t => t.resolved === true);
 
                 const rowsHtml = items.map(t => {
                     let actionHtml = '';
-                    if (!isHistory) {
-                        const isPaid = (t.status === 'paid' || isPaidLocal(t.id));
-                        actionHtml = isPaid
-                          ? `<button class="btn-paid" data-toggle-pay="${t.id}" data-current="paid" type="button"><span class="checkmark"></span> Paid</button>`
-                          : `<button class="ghost" data-toggle-pay="${t.id}" data-current="open" type="button">Mark paid</button>`;
-                    } else {
+                                        if (!isHistory) {
+                                            const isResolved = (t.resolved === true);
+                                            actionHtml = isResolved
+                                              // Paid state is clickable to allow toggling back to open
+                                              ? `<button class="btn-paid" data-toggle-pay="${t.id}" type="button"><span class="checkmark"></span> Paid</button>`
+                                              : `<button class="ghost" data-toggle-pay="${t.id}" type="button">Mark paid</button>`;
+                                        } else {
                         actionHtml = `<span class="badge success">resolved</span>`;
                     }
 
@@ -234,60 +222,109 @@
             window.location.href = 'ticketHistory.html';
         });
 
-        // Delegated action: toggle paid
+        // Realtime: reflect resolved updates from other devices instantly
+        let realtimeSetup = false;
+        function setupRealtime() {
+            if (realtimeSetup || !sb?.channel) return;
+            try {
+                sb.channel('ticket-resolved-sync')
+                  .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ticket' }, (payload) => {
+                      const row = payload?.new;
+                      if (!row) return;
+                      // Ignore if ticket was moved to history (status resolved), it will disappear on next refresh
+                      if (String(row.status || '').toLowerCase() === 'resolved') return;
+                      const listId = row.list_id;
+                      const id = row.id;
+                      const resolved = !!row.resolved;
+
+                      // Update cache
+                      const key = String(listId);
+                      if (lastGroups.has(key)) {
+                          const group = lastGroups.get(key);
+                          const idx = group.findIndex(t => String(t.id) === String(id));
+                          if (idx !== -1) {
+                              group[idx].resolved = resolved;
+                          }
+                      }
+
+                      // Update DOM button and Resolve state if the card is visible
+                      const card = listEl?.querySelector(`.ticket-card[data-list="${listId}"]`);
+                      if (card) {
+                          const btn = card.querySelector(`[data-toggle-pay="${id}"]`);
+                          if (btn) {
+                              if (resolved) {
+                                  btn.className = 'btn-paid';
+                                  btn.innerHTML = '<span class="checkmark"></span> Paid';
+                              } else {
+                                  btn.className = 'ghost';
+                                  btn.textContent = 'Mark paid';
+                              }
+                          }
+                          const group = lastGroups.get(key) || [];
+                          const allPaidNow = group.length > 0 && group.every(t => t.resolved === true);
+                          const foot = card.querySelector('.ticket-foot');
+                          if (foot) {
+                              const resolveEl = foot.querySelector('[data-resolve]');
+                              if (resolveEl) {
+                                  if (allPaidNow) resolveEl.removeAttribute('disabled');
+                                  else resolveEl.setAttribute('disabled', '');
+                              }
+                          }
+                      }
+                  })
+                  .subscribe();
+                realtimeSetup = true;
+            } catch (_) { /* no-op */ }
+        }
+
+        // Delegated action: mark a single ticket row as paid by setting resolved=true
         if (listEl) listEl.addEventListener('click', async (e)=>{
             const toggleBtn = e.target.closest('[data-toggle-pay]');
             if (toggleBtn) {
                 const id = toggleBtn.getAttribute('data-toggle-pay');
-                const current = toggleBtn.getAttribute('data-current'); // 'open' | 'paid'
-                const nextStatus = current === 'paid' ? 'open' : 'paid';
-
                 const row = toggleBtn.closest('.ticket-row');
                 const card = toggleBtn.closest('.ticket-card');
 
-                // Optimistic UI swap
+                // Determine current state from cache if available, otherwise infer from class
+                const listId = card?.dataset?.list;
+                let group = listId && lastGroups.has(listId) ? lastGroups.get(listId) : [];
+                const tIdx = group.findIndex(t => String(t.id) === String(id));
+                const currentlyResolved = tIdx !== -1 ? group[tIdx].resolved : toggleBtn.classList.contains('btn-paid');
+
+                // Optimistic UI swap based on the target state
                 const original = toggleBtn.outerHTML;
-                const newBtn = document.createElement('button');
-                if (nextStatus === 'paid') {
+                let newBtn = document.createElement('button');
+                newBtn.type = 'button';
+                if (!currentlyResolved) {
                     newBtn.className = 'btn-paid';
-                    newBtn.type = 'button';
                     newBtn.setAttribute('data-toggle-pay', id);
-                    newBtn.setAttribute('data-current', 'paid');
                     newBtn.innerHTML = '<span class="checkmark"></span> Paid';
                 } else {
                     newBtn.className = 'ghost';
-                    newBtn.type = 'button';
                     newBtn.setAttribute('data-toggle-pay', id);
-                    newBtn.setAttribute('data-current', 'open');
                     newBtn.textContent = 'Mark paid';
                 }
                 toggleBtn.replaceWith(newBtn);
 
-                // Update localStorage immediately so it survives refresh
-                setPaidState(id, nextStatus === 'paid');
+                // Persist to DB below; UI will reflect DB on next load
 
                 // Update cache and resolve button state
                 try {
-                    const listId = card?.dataset?.list;
-                    if (listId && lastGroups.has(listId)) {
-                        const group = lastGroups.get(listId);
-                        const tIdx = group.findIndex(t => String(t.id) === String(id));
-                        if (tIdx !== -1) {
-                            group[tIdx].status = nextStatus;
-                            const allPaidNow = group.every(t => (isPaidLocal(t.id) || t.status === 'paid' || t.status === 'resolved'));
-                            const foot = card.querySelector('.ticket-foot');
-                            if (foot) {
-                                let resolveEl = foot.querySelector('[data-resolve]');
-                                if (!resolveEl) {
-                                    const wrap = document.createElement('div');
-                                    wrap.className = 'resolve-wrap';
-                                    wrap.innerHTML = `<button class="primary" data-resolve="${listId}" ${allPaidNow ? '' : 'disabled'}>Resolve</button>`;
-                                    foot.appendChild(wrap);
-                                    resolveEl = wrap.firstElementChild;
-                                } else {
-                                    if (allPaidNow) resolveEl.removeAttribute('disabled');
-                                    else resolveEl.setAttribute('disabled', '');
-                                }
+                    if (tIdx !== -1) {
+                        group[tIdx].resolved = !currentlyResolved;
+                        const allPaidNow = group.every(t => t.resolved === true);
+                        const foot = card.querySelector('.ticket-foot');
+                        if (foot) {
+                            let resolveEl = foot.querySelector('[data-resolve]');
+                            if (!resolveEl) {
+                                const wrap = document.createElement('div');
+                                wrap.className = 'resolve-wrap';
+                                wrap.innerHTML = `<button class="primary" data-resolve="${listId}" ${allPaidNow ? '' : 'disabled'}>Resolve</button>`;
+                                foot.appendChild(wrap);
+                                resolveEl = wrap.firstElementChild;
+                            } else {
+                                if (allPaidNow) resolveEl.removeAttribute('disabled');
+                                else resolveEl.setAttribute('disabled', '');
                             }
                         }
                     }
@@ -296,17 +333,35 @@
                 // Optional: still try to persist to DB; if it fails, revert local state and UI
                 let affected = 0; let upErr = null;
                 try {
-                    const { error: e1 } = await sb.from('ticket').update({ status: nextStatus }).eq('id', String(id));
-                    if (!e1) affected = 1; else upErr = e1;
+                    const { data: updRows, error: e1 } = await sb
+                        .from('ticket')
+                        .update({ resolved: !currentlyResolved })
+                        .eq('id', String(id))
+                        .select('id');
+                    if (e1) {
+                        upErr = e1;
+                    } else {
+                        affected = Array.isArray(updRows) ? updRows.length : 0;
+                    }
                 } catch (ex1) { upErr = ex1; }
 
                 if (affected === 0) {
-                    // Revert LS + UI if you want strict DB-sync; otherwise comment this block out to keep LS as source of truth
-                    setPaidState(id, current === 'paid');
+                    // Revert UI on failure and notify
                     const revert = document.createElement('span');
                     revert.innerHTML = original;
                     newBtn.replaceWith(revert.firstElementChild);
-                 const msg = upErr ? (upErr.message || 'Unknown') : 'No rows updated';
+                    const msg = upErr ? (upErr.message || 'Unknown') : 'No rows updated (RLS/permission?)';
+                    // Revert cached state to avoid enabling Resolve incorrectly
+                    try {
+                        if (tIdx !== -1) {
+                            group[tIdx].resolved = currentlyResolved;
+                                const foot = card.querySelector('.ticket-foot');
+                                if (foot) {
+                                    const resolveEl = foot.querySelector('[data-resolve]');
+                                    if (resolveEl) resolveEl.setAttribute('disabled', '');
+                                }
+                        }
+                    } catch(_) {}
                     alert('Error updating status: ' + msg);
                     return;
                 }
@@ -331,8 +386,8 @@
                 e.stopPropagation();
                 const listId = resolveBtn.getAttribute('data-resolve');
                 const group = lastGroups.get(listId) || [];
-                // Consider localStorage-paid flags in addition to DB status
-                const allPaid = group.length > 0 && group.every(t => (t.status === 'paid' || t.status === 'resolved' || isPaidLocal(t.id)));
+                // Gate on DB-backed resolved flag only so state is consistent across devices
+                const allPaid = group.length > 0 && group.every(t => t.resolved === true);
                 if (!allPaid) {
                     alert('All rows must be paid before resolving.');
                     return;
@@ -453,8 +508,7 @@
                         console.warn('Shopping list delete threw:', delEx);
                     }
 
-                    // Clear any saved local Paid flags for tickets in this list
-                    try { clearPaidForIds(ids); } catch(_) {}
+                    // Local flags not used for render anymore; no cleanup required
 
                     await loadTickets();
                     // Safety: if the card still exists due to a race, remove it now
@@ -478,10 +532,6 @@
             // Delete entire active ticket list
             const delListBtn = e.target.closest('[data-delete-list]');
             if (delListBtn && !isHistory) {
-                // Also clear LS paid flags for that list's current tickets (if cached)
-                const listId = delListBtn.getAttribute('data-delete-list');
-                const group = lastGroups.get(listId) || [];
-                clearPaidForIds(group.map(t => t.id));
                 // ...existing delete flow...
             }
 
@@ -493,6 +543,7 @@
             }
         });
 
+        setupRealtime();
         loadTickets();
     });
 })();
