@@ -412,7 +412,7 @@
                     // Build a single receipt payload
                     const listName = group[0]?.name || group[0]?.list_name || `Receipt ${new Date().toLocaleString()}`;
                     const createdAt = new Date().toISOString();
-                    const total = group.reduce((s, t) => s + Number(t.amount_due || 0), 0);
+                    const totalFromGroup = group.reduce((s, t) => s + Number(t.amount_due || 0), 0);
                     const tickets = group.map(t => ({
                         ticket_id: t.id,
                         person: t.person,
@@ -420,12 +420,39 @@
                         status: t.status,
                         created_at: t.created_at
                     }));
+                    // Load purchased items from the list before deletion
+                    let items = [];
+                    try {
+                        const { data: itemsData } = await sb
+                            .from('shopping_list_items')
+                            .select('id, name, price, quantity, category, item_glossary ( name, price, category, store )')
+                            .eq('list_id', listId)
+                            .order('sort_order', { ascending: true });
+                        items = (itemsData || []).map(r => {
+                            const g = r.item_glossary?.[0] || r.item_glossary;
+                            return {
+                                name: r.name || g?.name || 'Item',
+                                price: Number((r.price ?? g?.price) || 0),
+                                quantity: Number(r.quantity || 1),
+                                category: r.category || g?.category || null,
+                                store: g?.store || null
+                            };
+                        });
+                    } catch (_) { /* ignore, items remain empty */ }
+
+                    // Prefer item-derived total if items present; else fall back to tickets sum
+                    let total = totalFromGroup;
+                    if (items.length) {
+                        total = items.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.quantity || 1), 0);
+                    }
+
                     const receipt = {
                         list_id: listId,
                         name: listName,
                         created_at: createdAt,
                         total,
-                        tickets
+                        tickets,
+                        items
                     };
 
                     // Insert one row into ticket_history with simplified columns
@@ -538,8 +565,23 @@
             // Delete history receipt
             const delBtn = e.target.closest('[data-delete-history]');
             if (delBtn) {
-                // no LS needed for history
-                // ...existing history delete flow...
+                e.preventDefault();
+                const listId = delBtn.getAttribute('data-delete-history');
+                if (!listId) return;
+                if (!confirm('Delete this receipt from history? This cannot be undone.')) return;
+                try {
+                    const { error: delErr } = await sb.from('ticket_history').delete().eq('id', listId);
+                    if (delErr) throw delErr;
+                    // Remove card from DOM
+                    const card = listEl?.querySelector(`.ticket-card[data-list="${listId}"]`);
+                    if (card && card.parentNode) card.parentNode.removeChild(card);
+                    if (listEl && listEl.querySelectorAll('.ticket-card').length === 0 && empty) {
+                        empty.textContent = 'No history yet.';
+                    }
+                } catch (err) {
+                    alert('Failed to delete history item: ' + (err?.message || 'Unknown error'));
+                }
+                return;
             }
         });
 
@@ -551,61 +593,102 @@
 // ---- Review dialog logic ----
 async function openReviewDialog(listId){
     const sb = window.sb;
-    const dlg = document.getElementById('review-dialog');
-    const content = document.getElementById('review-content');
-    const title = document.getElementById('review-title');
-    if (!sb || !dlg || !content) return;
+    if (!sb) return;
+
+    // Ensure dialog exists on both pages
+    let dlg = document.getElementById('review-dialog');
+    let content = document.getElementById('review-content');
+    let title = document.getElementById('review-title');
+    if (!dlg || !content || !title) {
+        dlg = document.createElement('dialog');
+        dlg.id = 'review-dialog';
+        dlg.setAttribute('aria-labelledby', 'review-title');
+        dlg.innerHTML = `
+            <form method="dialog" style="margin:0;">
+                <header style="display:flex; align-items:center; gap:8px;">
+                    <h3 id="review-title" style="margin:0;">Order Review</h3>
+                    <button type="submit" class="ghost" style="margin-left:auto;">Close</button>
+                </header>
+                <div id="review-content" style="margin-top:10px;"></div>
+            </form>`;
+        document.body.appendChild(dlg);
+        content = dlg.querySelector('#review-content');
+        title = dlg.querySelector('#review-title');
+    }
 
     content.innerHTML = '<div class="muted">Loading…</div>';
 
-    // Fetch list name
+    // Try history first: if listId is a history id, get name and receipt_jsonb
     let listName = `List ${listId}`;
+    let historyReceipt = null;
     try {
-        const { data: listRows, error: listErr } = await sb
-            .from('shopping_lists')
-            .select('list_name')
+        const { data: hist } = await sb
+            .from('ticket_history')
+            .select('id, name, receipt_jsonb')
             .eq('id', listId)
             .limit(1);
-        if (!listErr && Array.isArray(listRows) && listRows[0]?.list_name) {
-            listName = listRows[0].list_name;
+        if (Array.isArray(hist) && hist[0]) {
+            listName = hist[0].name || listName;
+            historyReceipt = hist[0].receipt_jsonb || null;
         }
     } catch {}
+
+    // If not found in history, fall back to active list name
+    if (!historyReceipt) {
+        try {
+            const { data: listRows } = await sb
+                .from('shopping_lists')
+                .select('list_name')
+                .eq('id', listId)
+                .limit(1);
+            if (Array.isArray(listRows) && listRows[0]?.list_name) {
+                listName = listRows[0].list_name;
+            }
+        } catch {}
+    }
     if (title) title.textContent = `Order Review — ${listName}`;
 
-    // Try to load from history receipt_jsonb first if listId looks like a UUID present in history
+    // Build items either from history receipt_jsonb or active list
     let items = [];
-    try {
-        const { data: hist } = await sb.from('ticket_history').select('receipt_jsonb').eq('id', listId).limit(1);
-        const rec = Array.isArray(hist) && hist[0]?.receipt_jsonb;
-        if (rec && Array.isArray(rec.items)) {
-            items = rec.items;
+    if (historyReceipt) {
+        if (Array.isArray(historyReceipt.items)) {
+            items = historyReceipt.items;
+        } else if (Array.isArray(historyReceipt.tickets)) {
+            // Map ticket summary into an item-like structure
+            items = historyReceipt.tickets.map(t => ({
+                name: t.person ? `Paid by ${t.person}` : 'Paid',
+                price: Number(t.amount_due || 0),
+                quantity: 1,
+                category: 'Share',
+                store: null
+            }));
         }
-    } catch {}
+    }
 
     if (!items.length) {
         // Active list: join shopping_list_items with item_glossary when available
-        const { data, error } = await sb
-            .from('shopping_list_items')
-            .select('id, name, price, quantity, category, item_glossary ( name, price, category, store )')
-            .eq('list_id', listId)
-            .order('sort_order', { ascending: true });
-
-        if (error) {
+        try {
+            const { data, error } = await sb
+                .from('shopping_list_items')
+                .select('id, name, price, quantity, category, item_glossary ( name, price, category, store )')
+                .eq('list_id', listId)
+                .order('sort_order', { ascending: true });
+            if (error) throw error;
+            items = (data || []).map(r => {
+                const g = r.item_glossary?.[0] || r.item_glossary; // handle nested object/array
+                return {
+                    name: r.name || g?.name || 'Item',
+                    price: Number((r.price ?? g?.price) || 0),
+                    quantity: Number(r.quantity || 1),
+                    category: r.category || g?.category || null,
+                    store: g?.store || null
+                };
+            });
+        } catch (error) {
             content.innerHTML = `<div class="muted">Failed to load items: ${escapeHtml(error.message)}</div>`;
             showDialog(dlg);
             return;
         }
-
-        items = (data || []).map(r => {
-            const g = r.item_glossary?.[0] || r.item_glossary; // handle nested object/array
-            return {
-                name: r.name || g?.name || 'Item',
-                price: Number((r.price ?? g?.price) || 0),
-                quantity: Number(r.quantity || 1),
-                category: r.category || g?.category || null,
-                store: g?.store || null
-            };
-        });
     }
 
     // Compute totals
