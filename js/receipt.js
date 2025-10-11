@@ -7,6 +7,51 @@
 
         // Mark Paid persistence now relies solely on the DB column `ticket.resolved`.
 
+        // Edge Function config for ready-to-resolve email
+        const EDGE_FUNCTION_URL = 'https://ktwvxfamdcwkguerkjal.functions.supabase.co/hello-email';
+        // If your function enforces JWT verification, include anon key
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0d3Z4ZmFtZGN3a2d1ZXJramFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwOTUxNDUsImV4cCI6MjA3NDY3MTE0NX0.rU3I2WA0CksR601Pj4PoOwzrHbaReg-7aUfLLk1tNhw';
+        // Avoid duplicate notifications per page session
+        const readyNotified = (window.__readyNotified ||= new Set());
+
+        async function sendReadyEmail(listId){
+            try {
+                if (!listId) return;
+                const key = String(listId);
+                if (readyNotified.has(key)) return; // already sent this session
+                const group = lastGroups.get(listId) || [];
+                if (!group.length) return;
+                // Build list name and total from cached rows
+                const listName = group[0]?.name || group[0]?.list_name || `List ${listId}`;
+                const total = group.reduce((s, t) => s + Number(t.amount_due || 0), 0);
+                const body = {
+                    to: 'wardgd3@gmail.com',
+                    list_id: listId,
+                    list_name: listName,
+                    total
+                };
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                };
+                fetch(EDGE_FUNCTION_URL, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(body)
+                }).then(async (res) => {
+                    if (!res.ok) {
+                        const txt = await res.text().catch(()=> '');
+                        console.warn('ready-email failed:', res.status, txt);
+                        return;
+                    }
+                    readyNotified.add(key);
+                    console.info('Ready email sent for list', listId);
+                }).catch(err => console.warn('ready-email error:', err));
+            } catch (e) {
+                console.warn('sendReadyEmail error:', e);
+            }
+        }
+
         const listEl = document.getElementById('tickets-list');
         const empty = document.getElementById('tickets-empty');
         const refreshBtn = document.getElementById('refresh-tickets-btn');
@@ -270,6 +315,10 @@
                                   else resolveEl.setAttribute('disabled', '');
                               }
                           }
+                          // If now ready, trigger email once
+                          if (allPaidNow) {
+                              sendReadyEmail(listId);
+                          }
                       }
                   })
                   .subscribe();
@@ -326,6 +375,10 @@
                                 if (allPaidNow) resolveEl.removeAttribute('disabled');
                                 else resolveEl.setAttribute('disabled', '');
                             }
+                        }
+                        // If now ready, trigger email once
+                        if (allPaidNow) {
+                            sendReadyEmail(listId);
                         }
                     }
                 } catch(_) {}
