@@ -13,14 +13,19 @@
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0d3Z4ZmFtZGN3a2d1ZXJramFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwOTUxNDUsImV4cCI6MjA3NDY3MTE0NX0.rU3I2WA0CksR601Pj4PoOwzrHbaReg-7aUfLLk1tNhw';
         // Avoid duplicate notifications per page session
         const readyNotified = (window.__readyNotified ||= new Set());
+        // In-flight guard to prevent races from multiple call sites (optimistic + realtime)
+        const readyInFlight = (window.__readyInFlight ||= new Set());
 
         async function sendReadyEmail(listId){
             try {
                 if (!listId) return;
                 const key = String(listId);
                 if (readyNotified.has(key)) return; // already sent this session
+                if (readyInFlight.has(key)) return;  // prevent concurrent/racing sends
+                readyInFlight.add(key);
+
                 const group = lastGroups.get(listId) || [];
-                if (!group.length) return;
+                if (!group.length) { readyInFlight.delete(key); return; }
                 // Build list name and total from cached rows
                 const listName = group[0]?.name || group[0]?.list_name || `List ${listId}`;
                 const total = group.reduce((s, t) => s + Number(t.amount_due || 0), 0);
@@ -34,21 +39,25 @@
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
                 };
-                fetch(EDGE_FUNCTION_URL, {
+                const res = await fetch(EDGE_FUNCTION_URL, {
                     method: 'POST',
                     headers,
                     body: JSON.stringify(body)
-                }).then(async (res) => {
-                    if (!res.ok) {
-                        const txt = await res.text().catch(()=> '');
-                        console.warn('ready-email failed:', res.status, txt);
-                        return;
-                    }
-                    readyNotified.add(key);
-                    console.info('Ready email sent for list', listId);
-                }).catch(err => console.warn('ready-email error:', err));
+                });
+
+                if (!res.ok) {
+                    const txt = await res.text().catch(()=> '');
+                    console.warn('ready-email failed:', res.status, txt);
+                    // allow retry on failure
+                    readyInFlight.delete(key);
+                    return;
+                }
+                readyNotified.add(key);
+                readyInFlight.delete(key);
+                console.info('Ready email sent for list', listId);
             } catch (e) {
                 console.warn('sendReadyEmail error:', e);
+                try { readyInFlight.delete(String(listId)); } catch {}
             }
         }
 
@@ -57,7 +66,7 @@
         const refreshBtn = document.getElementById('refresh-tickets-btn');
         const backBtn = document.getElementById('back-btn');
         const historyBtn = document.getElementById('history-btn');
-    const createCustomBtn = document.getElementById('create-custom-ticket-btn');
+        const createCustomBtn = document.getElementById('create-custom-ticket-btn');
         const isHistory = (document.body && document.body.dataset && document.body.dataset.view === 'history');
 
         // Cache of last groups for resolve actions
@@ -208,13 +217,13 @@
 
                 const rowsHtml = items.map(t => {
                     let actionHtml = '';
-                                        if (!isHistory) {
-                                            const isResolved = (t.resolved === true);
-                                            actionHtml = isResolved
-                                              // Paid state is clickable to allow toggling back to open
-                                              ? `<button class="btn-paid" data-toggle-pay="${t.id}" type="button"><span class="checkmark"></span> Paid</button>`
-                                              : `<button class="ghost" data-toggle-pay="${t.id}" type="button">Mark paid</button>`;
-                                        } else {
+                    if (!isHistory) {
+                        const isResolved = (t.resolved === true);
+                        actionHtml = isResolved
+                          // Paid state is clickable to allow toggling back to open
+                          ? `<button class="btn-paid" data-toggle-pay="${t.id}" type="button"><span class="checkmark"></span> Paid</button>`
+                          : `<button class="ghost" data-toggle-pay="${t.id}" type="button">Mark paid</button>`;
+                    } else {
                         actionHtml = `<span class="badge success">resolved</span>`;
                     }
 

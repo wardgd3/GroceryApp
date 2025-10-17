@@ -23,7 +23,7 @@
     });
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
+  /*document.addEventListener('DOMContentLoaded', function () {
     var btn = document.getElementById('send-test-email');
     if (!btn) {
       console.warn('[sb-client] Button #send-test-email not found.');
@@ -54,5 +54,5 @@
         alert('❌ Error: ' + (err && err.message ? err.message : String(err)));
       });
     });
-  });
+  });*/
 })();
