@@ -40,7 +40,7 @@
 				<div class="split">
 					<h2>Resolve Tickets</h2>
 					<div class="actions" style="display:flex; gap:8px;">
-			
+						<button class="ghost" id="create-custom-ticket-btn">Create Custom Ticket</button>
 						<button class="ghost" id="history-btn">Ticket History</button>
 						<button class="ghost" id="refresh-tickets-btn">Refresh</button>
 					</div>
@@ -57,6 +57,37 @@
 						<button type="submit" class="ghost" style="margin-left:auto;">Close</button>
 					</header>
 					<div id="review-content" style="margin-top:10px;"></div>
+				</form>
+			</dialog>
+
+			<!-- Create Custom Ticket Dialog -->
+			<dialog id="custom-ticket-dialog">
+				<form id="custom-ticket-form" method="dialog" style="min-width:320px; max-width:560px;">
+					<h3 style="margin:0 0 8px 0;">Create Custom Ticket</h3>
+					<div class="muted" id="custom-ticket-msg" style="margin-bottom:8px;"></div>
+					<label style="display:block; margin-bottom:8px;">
+						<div class="muted">Title</div>
+						<input id="ct-title" type="text" placeholder="e.g., Cody house sitting" required />
+					</label>
+					<label style="display:block; margin-bottom:8px;">
+						<div class="muted">Description (optional)</div>
+						<input id="ct-desc" type="text" placeholder="e.g., Gatlinburg house sitting Oct. 11–14" />
+					</label>
+					<div style="display:flex; gap:12px;">
+						<label style="flex:1;">
+							<div class="muted">Grant owes</div>
+							<input id="ct-grant" type="number" min="0" step="0.01" placeholder="0.00" />
+						</label>
+						<label style="flex:1;">
+							<div class="muted">Emily owes</div>
+							<input id="ct-emily" type="number" min="0" step="0.01" placeholder="0.00" />
+						</label>
+					</div>
+					<div class="muted" id="ct-total" style="margin-top:6px;">Total: $0.00</div>
+					<div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+						<button type="button" class="ghost" id="ct-cancel">Cancel</button>
+						<button type="submit" id="ct-create">Create</button>
+					</div>
 				</form>
 			</dialog>
 		</main>

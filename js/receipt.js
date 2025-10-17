@@ -57,6 +57,7 @@
         const refreshBtn = document.getElementById('refresh-tickets-btn');
         const backBtn = document.getElementById('back-btn');
         const historyBtn = document.getElementById('history-btn');
+    const createCustomBtn = document.getElementById('create-custom-ticket-btn');
         const isHistory = (document.body && document.body.dataset && document.body.dataset.view === 'history');
 
         // Cache of last groups for resolve actions
@@ -266,6 +267,94 @@
         if (historyBtn) historyBtn.addEventListener('click', () => {
             window.location.href = 'ticketHistory.html';
         });
+        if (createCustomBtn) createCustomBtn.addEventListener('click', openCustomDialog);
+
+        // Custom Ticket dialog logic
+        function openCustomDialog(){
+            let dlg = document.getElementById('custom-ticket-dialog');
+            if (!dlg) return;
+            const form = dlg.querySelector('#custom-ticket-form');
+            const msgEl = dlg.querySelector('#custom-ticket-msg');
+            const titleEl = dlg.querySelector('#ct-title');
+            const descEl = dlg.querySelector('#ct-desc');
+            const gEl = dlg.querySelector('#ct-grant');
+            const eEl = dlg.querySelector('#ct-emily');
+            const totalEl = dlg.querySelector('#ct-total');
+            const cancelBtn = dlg.querySelector('#ct-cancel');
+
+            // Reset fields
+            msgEl.textContent = '';
+            titleEl.value = '';
+            descEl.value = '';
+            gEl.value = '';
+            eEl.value = '';
+            totalEl.textContent = 'Total: $0.00';
+
+            const n = (v)=> Number(v) || 0;
+            function updateTotal(){
+                const tot = n(gEl.value) + n(eEl.value);
+                totalEl.textContent = `Total: $${tot.toFixed(2)}`;
+            }
+            gEl.oninput = updateTotal;
+            eEl.oninput = updateTotal;
+            cancelBtn.onclick = (e)=>{ e.preventDefault(); try{ dlg.close(); } catch{ dlg.open = false; } };
+
+            form.onsubmit = async (e)=>{
+                e.preventDefault();
+                const name = (titleEl.value || '').trim();
+                const description = (descEl.value || '').trim();
+                const grantOwes = n(gEl.value);
+                const emilyOwes = n(eEl.value);
+                if (!name) { msgEl.textContent = 'Please enter a title.'; return; }
+                if (grantOwes <= 0 && emilyOwes <= 0) { msgEl.textContent = 'Enter an amount for Grant and/or Emily.'; return; }
+                msgEl.textContent = 'Creating…';
+
+                try {
+                    // 1) Create a lightweight shopping list row to anchor the tickets
+                    const listPayload = {
+                        list_name: name,
+                        list_date: new Date().toISOString().slice(0,10),
+                        notes: description || null
+                    };
+                    let listId = null;
+                    try {
+                        const { data: listRow, error: le } = await sb
+                            .from('shopping_lists')
+                            .insert(listPayload)
+                            .select('id')
+                            .single();
+                        if (le) throw le;
+                        listId = listRow?.id;
+                    } catch (ex) {
+                        // If schema has no notes column, retry without it
+                        const { data: listRow, error: le2 } = await sb
+                            .from('shopping_lists')
+                            .insert({ list_name: listPayload.list_name, list_date: listPayload.list_date })
+                            .select('id')
+                            .single();
+                        if (le2) throw le2;
+                        listId = listRow?.id;
+                    }
+                    if (!listId) throw new Error('Failed to create parent list');
+
+                    // 2) Create ticket rows mirroring normal flow
+                    const rows = [];
+                    if (grantOwes > 0) rows.push({ list_id: listId, name, person: 'grant', amount_due: grantOwes, status: 'open', resolved: false });
+                    if (emilyOwes > 0) rows.push({ list_id: listId, name, person: 'emily', amount_due: emilyOwes, status: 'open', resolved: false });
+                    const { error: te } = await sb.from('ticket').insert(rows);
+                    if (te) throw te;
+
+                    // 3) Close dialog and refresh tickets
+                    try{ dlg.close(); } catch{ dlg.open = false; }
+                    await loadTickets();
+                } catch (err) {
+                    console.error('create custom ticket failed:', err);
+                    msgEl.textContent = 'Error: ' + (err?.message || 'Failed to create ticket');
+                }
+            };
+
+            try { dlg.showModal(); } catch { dlg.open = true; }
+        }
 
         // Realtime: reflect resolved updates from other devices instantly
         let realtimeSetup = false;

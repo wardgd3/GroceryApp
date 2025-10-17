@@ -1,5 +1,12 @@
 // js/script.js
 document.addEventListener("DOMContentLoaded", () => {
+  // Re-render totals when 'no tax' checkbox changes
+  const noTaxCheckbox = document.getElementById('no-tax-checkbox');
+  if (noTaxCheckbox) {
+    noTaxCheckbox.addEventListener('change', () => {
+      renderTotals();
+    });
+  }
   // Bind Supabase client (may be undefined initially due to script load order)
   let sb = window.sb;
 
@@ -394,6 +401,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let subtotalEmily = 0;
     let taxGrant = 0;
     let taxEmily = 0;
+    const noTax = document.getElementById('no-tax-checkbox')?.checked;
 
     items.forEach((i) => {
       const qty = n(i.quantity) || 1;
@@ -411,25 +419,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (consumer === "grant") {
         subtotalGrant += line;
-        taxGrant += line * rate;
+        if (!noTax) taxGrant += line * rate;
       } else if (consumer === "emily") {
         subtotalEmily += line;
-        taxEmily += line * rate;
+        if (!noTax) taxEmily += line * rate;
       } else { 
         if (isMeat) {
           const gPart = line * 0.60;
           const ePart = line * 0.40;
           subtotalGrant += gPart;
           subtotalEmily += ePart;
-          taxGrant += gPart * rate;
-          taxEmily += ePart * rate;
+          if (!noTax) {
+            taxGrant += gPart * rate;
+            taxEmily += ePart * rate;
+          }
         } else {
           const gPart = line * 0.50;
           const ePart = line * 0.50;
           subtotalGrant += gPart;
           subtotalEmily += ePart;
-          taxGrant += gPart * rate;
-          taxEmily += ePart * rate;
+          if (!noTax) {
+            taxGrant += gPart * rate;
+            taxEmily += ePart * rate;
+          }
         }
       }
     });
@@ -441,8 +453,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     totalsEl.innerHTML = `
       <div>
-  Grant: $${totalGrant.toFixed(2)} <span class="muted">(incl. item-based tax)</span><br/>
-  Emily: $${totalEmily.toFixed(2)} <span class="muted">(incl. item-based tax)</span>
+        Grant: $${totalGrant.toFixed(2)} <span class="muted">${noTax ? '(no tax)' : '(incl. item-based tax)'}</span><br/>
+        Emily: $${totalEmily.toFixed(2)} <span class="muted">${noTax ? '(no tax)' : '(incl. item-based tax)'}</span>
         <br/><strong>Grand Total: $${grandTotal.toFixed(2)}</strong>
       </div>
     `;
@@ -453,12 +465,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!currentList) { alert('Open a list first.'); return false; }
     if (!items || !items.length) { alert('No items in this list.'); return false; }
 
-  // Recompute totals using the same logic as renderTotals with item-based tax
+    // Recompute totals using the same logic as renderTotals, respecting 'no tax'
     const n = (v) => Number(v) || 0;
-  let subtotalGrant = 0;
-  let subtotalEmily = 0;
-  let taxGrant = 0;
-  let taxEmily = 0;
+    let subtotalGrant = 0;
+    let subtotalEmily = 0;
+    let taxGrant = 0;
+    let taxEmily = 0;
+    const noTax = document.getElementById('no-tax-checkbox')?.checked;
 
     items.forEach((i) => {
       const qty = n(i.quantity);
@@ -475,10 +488,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (cons === 'grant') {
         subtotalGrant += line;
-        taxGrant += line * rate;
+        if (!noTax) taxGrant += line * rate;
       } else if (cons === 'emily') {
         subtotalEmily += line;
-        taxEmily += line * rate;
+        if (!noTax) taxEmily += line * rate;
       } else {
         // both
         if (cat === 'meat') {
@@ -486,15 +499,19 @@ document.addEventListener("DOMContentLoaded", () => {
           const ePart = line * 0.4;
           subtotalGrant += gPart;
           subtotalEmily += ePart;
-          taxGrant += gPart * rate;
-          taxEmily += ePart * rate;
+          if (!noTax) {
+            taxGrant += gPart * rate;
+            taxEmily += ePart * rate;
+          }
         } else {
           const gPart = line * 0.5;
           const ePart = line * 0.5;
           subtotalGrant += gPart;
           subtotalEmily += ePart;
-          taxGrant += gPart * rate;
-          taxEmily += ePart * rate;
+          if (!noTax) {
+            taxGrant += gPart * rate;
+            taxEmily += ePart * rate;
+          }
         }
       }
     });
