@@ -2,7 +2,9 @@
 (function () {
   var SUPABASE_URL = 'https://ktwvxfamdcwkguerkjal.supabase.co';
   var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0d3Z4ZmFtZGN3a2d1ZXJramFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwOTUxNDUsImV4cCI6MjA3NDY3MTE0NX0.rU3I2WA0CksR601Pj4PoOwzrHbaReg-7aUfLLk1tNhw';
-  var EDGE_FUNCTION_URL = 'https://ktwvxfamdcwkguerkjal.functions.supabase.co/hello-email';
+
+  // 🔴 Toggle this to true only if you want to manually test sending emails again
+  var ENABLE_MANUAL_SEND = false;
 
   // 1) Guard: UMD bundle must be loaded first
   if (!window.supabase || !window.supabase.createClient) {
@@ -23,36 +25,43 @@
     });
   }
 
-  /*document.addEventListener('DOMContentLoaded', function () {
-    var btn = document.getElementById('send-test-email');
-    if (!btn) {
-      console.warn('[sb-client] Button #send-test-email not found.');
-      return;
-    }
+  // 3) Optional manual send (currently disabled)
+  if (ENABLE_MANUAL_SEND) {
+    document.addEventListener('DOMContentLoaded', function () {
+      var btn = document.getElementById('send-test-email');
+      if (!btn) {
+        console.warn('[sb-client] Button #send-test-email not found.');
+        return;
+      }
 
-    btn.addEventListener('click', function () {
-      fetch(EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY // remove if @verify_jwt false
-        },
-        body: JSON.stringify({ to: 'wardgd3@gmail.com' })
-      })
-      .then(function (res) {
-        return parseMaybeJson(res).then(function (parsed) {
-          if (!res.ok) {
-            var msg = (parsed.data && (parsed.data.error || parsed.data.message || parsed.data.detail)) || parsed.raw || ('HTTP ' + res.status);
-            throw new Error(msg);
-          }
-          console.log('[sb-client] Edge function response:', parsed.data || parsed.raw);
-          alert('✅ Email sent! Check your inbox.');
+      if (btn.dataset.bound === '1') return; // prevent double binding
+      btn.dataset.bound = '1';
+
+      btn.addEventListener('click', function (e) {
+        e.preventDefault(); // avoid accidental form submits
+        fetch('https://ktwvxfamdcwkguerkjal.functions.supabase.co/ticket-new-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
+          },
+          body: JSON.stringify({ to: 'wardgd3@gmail.com' })
+        })
+        .then(function (res) {
+          return parseMaybeJson(res).then(function (parsed) {
+            if (!res.ok) {
+              var msg = (parsed.data && (parsed.data.error || parsed.data.message || parsed.data.detail)) || parsed.raw || ('HTTP ' + res.status);
+              throw new Error(msg);
+            }
+            console.log('[sb-client] Edge function response:', parsed.data || parsed.raw);
+            alert('✅ Email sent! Check your inbox.');
+          });
+        })
+        .catch(function (err) {
+          console.error('[sb-client] Error:', err);
+          alert('❌ Error: ' + (err && err.message ? err.message : String(err)));
         });
-      })
-      .catch(function (err) {
-        console.error('[sb-client] Error:', err);
-        alert('❌ Error: ' + (err && err.message ? err.message : String(err)));
       });
     });
-  });*/
+  }
 })();
