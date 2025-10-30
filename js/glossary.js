@@ -101,11 +101,16 @@
     for (const k of keys){
       html += `<section class="g-section"><h2>${k}</h2>`;
       for (const it of groups.get(k)){
-  const parts = [];
-  if (it.category) parts.push(`<span class="g-tag">${escapeHtml(it.category)}</span>`);
-  if (typeof it.price === 'number') parts.push(`<span class="g-tag">$${Number(it.price).toFixed(2)}</span>`);
-  if (it.store) parts.push(`<span class="g-tag">${escapeHtml(String(it.store))}</span>`);
-  if (it.consumer) parts.push(`<span class="g-tag">${escapeHtml(it.consumer)}</span>`);
+        const parts = [];
+        if (it.category) parts.push(`<span class="g-tag">${escapeHtml(it.category)}</span>`);
+        // Show price_per_lb if set and price is not set or zero
+        if (typeof it.price_per_lb === 'number' && it.price_per_lb > 0 && (!it.price || it.price === 0)) {
+          parts.push(`<span class="g-tag">$${Number(it.price_per_lb).toFixed(2)} / lb</span>`);
+        } else if (typeof it.price === 'number') {
+          parts.push(`<span class="g-tag">$${Number(it.price).toFixed(2)}</span>`);
+        }
+        if (it.store) parts.push(`<span class="g-tag">${escapeHtml(String(it.store))}</span>`);
+        if (it.consumer) parts.push(`<span class="g-tag">${escapeHtml(it.consumer)}</span>`);
         const meta = parts.join('<span class="g-sep">•</span>');
         html += `
           <div class="g-item">
@@ -271,6 +276,10 @@
             <input id="eg-price" type="number" step="0.01" />
           </label>
           <label style="flex:1;">
+            <div class="muted">Price per lb</div>
+            <input id="eg-price-lb" type="number" step="0.01" />
+          </label>
+          <label style="flex:1;">
             <div class="muted">Category</div>
             <select id="eg-category"></select>
           </label>
@@ -307,7 +316,8 @@
     const form = dlg.querySelector('#edit-glossary-form');
     const msgEl = dlg.querySelector('#eg-msg');
     const nameEl = dlg.querySelector('#eg-name');
-    const priceEl = dlg.querySelector('#eg-price');
+  const priceEl = dlg.querySelector('#eg-price');
+  const priceLbEl = dlg.querySelector('#eg-price-lb');
     const catEl = dlg.querySelector('#eg-category');
     const consEl = dlg.querySelector('#eg-consumer');
   const cancelBtn = dlg.querySelector('#eg-cancel');
@@ -338,7 +348,8 @@
 
     msgEl.textContent = '';
     nameEl.value = item.name || '';
-    priceEl.value = (item.price != null && item.price !== '') ? Number(item.price) : '';
+  priceEl.value = (item.price != null && item.price !== '') ? Number(item.price) : '';
+  if (priceLbEl) priceLbEl.value = (item.price_per_lb != null && item.price_per_lb !== '') ? Number(item.price_per_lb) : '';
     catEl.value = currentCategory;
   consEl.value = String(item.consumer || 'both').toLowerCase();
   if (storeEl) storeEl.value = String(item.store || 'walmart').toLowerCase() === 'sams' ? 'sams' : 'walmart';
@@ -403,12 +414,13 @@
       e.preventDefault();
       const name = (nameEl.value || '').trim();
       const price = priceEl.value !== '' ? Number(priceEl.value) : null;
-  let category = normalizeCategory(catEl.value || 'other');
+      const price_per_lb = (priceLbEl && priceLbEl.value !== '') ? Number(priceLbEl.value) : null;
+      let category = normalizeCategory(catEl.value || 'other');
       const consumer = (consEl.value || 'both').toLowerCase();
       if (!name){ msgEl.textContent = 'Please enter a name'; return; }
       msgEl.textContent = 'Saving…';
-  const store = (storeEl && storeEl.value) ? String(storeEl.value).toLowerCase() : 'walmart';
-  const update = { name, price, category, consumer, store };
+      const store = (storeEl && storeEl.value) ? String(storeEl.value).toLowerCase() : 'walmart';
+      const update = { name, price, price_per_lb, category, consumer, store };
       const { error } = await sb.from('item_glossary').update(update).eq('id', item.id);
       if (error){ msgEl.textContent = 'Error: ' + (error.message || 'Failed to save'); return; }
       msgEl.textContent = 'Saved ✓';
