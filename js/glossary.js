@@ -134,7 +134,7 @@
   }
 
   async function fetchItems(){
-    let query = sb.from('item_glossary').select('id, name, price, category, consumer, store');
+    let query = sb.from('item_glossary').select('id, name, price, price_per_lb, category, consumer, store');
     if (currentTerm){
       const like = `%${currentTerm}%`;
       query = query.or(`name.ilike.${like},category.ilike.${like},consumer.ilike.${like}`);
@@ -219,12 +219,25 @@
       const listId = selectEl.value;
       if (!listId){ msgEl.textContent = 'Please choose a list'; return; }
       msgEl.textContent = 'Adding…';
+      let price = glossaryItem.price ?? null;
+      let quantity = 1;
+      let price_per_lb = null;
+      if (glossaryItem.price_per_lb != null && Number(glossaryItem.price_per_lb) > 0 && (price == null || price === 0)){
+        const resp = prompt('Enter total pounds:');
+        if (resp == null){ msgEl.textContent = 'Cancelled'; return; }
+        const pounds = Number(resp);
+        if (!pounds || pounds <= 0){ msgEl.textContent = 'Please enter a valid number of pounds.'; return; }
+        price_per_lb = Number(glossaryItem.price_per_lb);
+        price = price_per_lb;
+        quantity = pounds;
+      }
       const payload = {
         list_id: listId,
         item_id: glossaryItem.id,
         name: glossaryItem.name,
-        price: glossaryItem.price ?? null,
-        quantity: 1,
+        price: price,
+        price_per_lb: price_per_lb,
+        quantity: quantity,
         category: glossaryItem.category ?? null,
         consumer: (glossaryItem.consumer || 'both').toLowerCase(),
         is_checked: false

@@ -562,7 +562,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const { data, error } = await sb
       .from("item_glossary")
-      .select("id, name, price, category, consumer")
+      .select("id, name, price, price_per_lb, category, consumer")
       .ilike("name", `%${q}%`)
       .order("name", { ascending: true })
       .limit(12);
@@ -583,9 +583,12 @@ document.addEventListener("DOMContentLoaded", () => {
       el.className = "sugg" + (i === activeIndex ? " active" : "");
       el.setAttribute("role", "option");
       el.dataset.idx = i;
+      const priceMeta = (s.price != null)
+        ? `· $${Number(s.price).toFixed(2)}`
+        : (s.price_per_lb != null ? `· $${Number(s.price_per_lb).toFixed(2)}/lb` : "");
       el.innerHTML = `
         <div class="name">${escapeHtml(s.name)}</div>
-        <div class="meta">${s.category ?? ""} ${s.consumer ? "· " + escapeHtml(s.consumer) : ""} ${s.price != null ? "· $" + Number(s.price).toFixed(2) : ""}</div>
+        <div class="meta">${s.category ?? ""} ${s.consumer ? "· " + escapeHtml(s.consumer) : ""} ${priceMeta}</div>
       `;
       el.addEventListener("mousedown", async (e) => {
         e.preventDefault();
@@ -621,13 +624,24 @@ document.addEventListener("DOMContentLoaded", () => {
     hideSuggestions();
     // Auto-add to list if possible
     if (currentList) {
-      const qty = Number(gQtyEl.value) || 1;
-      const price = gPriceEl.value !== "" ? Number(gPriceEl.value) : (s.price ?? null);
+      let qty = Number(gQtyEl.value) || 1;
+      let price = gPriceEl.value !== "" ? Number(gPriceEl.value) : (s.price ?? null);
+      let price_per_lb = null;
+      if (gPriceEl.value === "" && s.price_per_lb != null && Number(s.price_per_lb) > 0) {
+        const resp = prompt("Enter total pounds:");
+        if (resp == null) return; // user cancelled
+        const pounds = Number(resp);
+        if (!pounds || pounds <= 0) { alert("Please enter a valid number of pounds."); return; }
+        price_per_lb = Number(s.price_per_lb);
+        price = price_per_lb; // store unit price, multiply by quantity in UI totals
+        qty = pounds;
+      }
       const payload = {
         list_id: currentList.id,
         item_id: s.id,
         name: s.name,
         price: price,
+        price_per_lb: price_per_lb,
         quantity: qty,
         category: s.category ?? null,
         consumer: (s.consumer || "both").toLowerCase(),
@@ -680,14 +694,25 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!currentList) return;
     if (!selectedGlossary) { alert("Pick an item from the suggestions first."); return; }
 
-    const qty = Number(gQtyEl.value) || 1;
-    const price = gPriceEl.value !== "" ? Number(gPriceEl.value) : (selectedGlossary.price ?? null);
+    let qty = Number(gQtyEl.value) || 1;
+    let price = gPriceEl.value !== "" ? Number(gPriceEl.value) : (selectedGlossary.price ?? null);
+    let price_per_lb = null;
+    if (gPriceEl.value === "" && selectedGlossary.price_per_lb != null && Number(selectedGlossary.price_per_lb) > 0) {
+      const resp = prompt("Enter total pounds:");
+      if (resp == null) return; // user cancelled
+      const pounds = Number(resp);
+      if (!pounds || pounds <= 0) { alert("Please enter a valid number of pounds."); return; }
+      price_per_lb = Number(selectedGlossary.price_per_lb);
+      price = price_per_lb;
+      qty = pounds;
+    }
 
     const payload = {
       list_id: currentList.id,
       item_id: selectedGlossary.id,
       name: selectedGlossary.name,
       price: price,
+      price_per_lb: price_per_lb,
       quantity: qty,
       category: selectedGlossary.category ?? null,
       consumer: (selectedGlossary.consumer || "both").toLowerCase(),

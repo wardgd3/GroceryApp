@@ -73,6 +73,10 @@
           <div class="muted">Price (optional)</div>
           <input id="agi-price" type="number" step="0.01" placeholder="0.00" />
         </label>
+        <label style="display:block; margin-bottom:8px;">
+          <div class="muted">Price per lb (optional)</div>
+          <input id="agi-price-lb" type="number" step="0.01" placeholder="0.00" />
+        </label>
         <div style="display:flex; gap:12px; margin-bottom:8px;">
           <label style="flex:1;">
             <div class="muted">Category</div>
@@ -142,6 +146,7 @@
     const form = dlg.querySelector('#add-glossary-form');
     const nameEl = dlg.querySelector('#agi-name');
     const priceEl = dlg.querySelector('#agi-price');
+    const priceLbEl = dlg.querySelector('#agi-price-lb');
     const catEl = dlg.querySelector('#agi-category');
     const consEl = dlg.querySelector('#agi-consumer');
   const msgEl = dlg.querySelector('#add-glossary-msg');
@@ -155,7 +160,8 @@
     // reset
     msgEl.textContent = '';
     nameEl.value = '';
-    priceEl.value = '';
+  priceEl.value = '';
+  if (priceLbEl) priceLbEl.value = '';
     catEl.value = 'other';
   consEl.value = 'both';
   if (storeEl) storeEl.value = 'walmart';
@@ -210,7 +216,8 @@
     form.onsubmit = async (e) => {
       e.preventDefault();
       const name = (nameEl.value || '').trim();
-      const price = priceEl.value !== '' ? Number(priceEl.value) : null;
+  const price = priceEl.value !== '' ? Number(priceEl.value) : null;
+  const price_per_lb = (priceLbEl && priceLbEl.value !== '') ? Number(priceLbEl.value) : null;
       let category = (catEl.value || 'other').toLowerCase().trim();
       const consumer = (consEl.value || 'both').toLowerCase().trim();
 
@@ -224,7 +231,7 @@
       msgEl.textContent = 'Saving…';
 
   const store = (storeEl && storeEl.value) ? String(storeEl.value).toLowerCase() : 'walmart';
-  const payload = { name, price, category, consumer, store };
+  const payload = { name, price, price_per_lb, category, consumer, store };
       const { error } = await sb.from('item_glossary').insert(payload);
       if (error) {
         console.error(error);
